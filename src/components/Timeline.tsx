@@ -104,6 +104,7 @@ export const Timeline: React.FC<TimelineProps> = ({
     startX: number;
     originalStartTime: number;
     originalDuration: number;
+    originalOffset: number;
   } | null>(null);
 
   // Property handles drag (transparency, volume, fadeIn, fadeOut)
@@ -144,24 +145,13 @@ export const Timeline: React.FC<TimelineProps> = ({
     if (onCommitHistory) onCommitHistory();
   };
 
-  // Link Video and Audio together
+  const linkCandidate = (clip: TimelineClip) => clips.find(c=>c.id===clip.linkedClipId && c.type!==clip.type && ['video','audio'].includes(c.type)) || clips.find(c=>c.type===(clip.type==='video'?'audio':'video') && c.mediaUrl===clip.mediaUrl && Math.abs(c.startTime-clip.startTime)<.1);
   const handleLinkVideoAudio = (clip: TimelineClip) => {
-    let paired: TimelineClip | undefined;
-    if (clip.linkedClipId) {
-      paired = clips.find(c => c.id === clip.linkedClipId);
-    }
-    if (!paired) {
-      if (clip.type === 'video') {
-        paired = clips.find(c => c.type === 'audio' && Math.abs(c.startTime - clip.startTime) < 5);
-      } else if (clip.type === 'audio') {
-        paired = clips.find(c => c.type === 'video' && Math.abs(c.startTime - clip.startTime) < 5);
-      }
-    }
-
-    if (paired) {
-      onUpdateClip(clip.id, { isLinked: true, linkedClipId: paired.id });
-      onUpdateClip(paired.id, { isLinked: true, linkedClipId: clip.id, startTime: clip.startTime });
-      if (onCommitHistory) onCommitHistory();
+    const paired=linkCandidate(clip);
+    if(paired) {
+      onUpdateClip(clip.id,{isLinked:true,linkedClipId:paired.id});
+      onUpdateClip(paired.id,{isLinked:true,linkedClipId:clip.id,startTime:clip.startTime});
+      if(onCommitHistory)onCommitHistory();
     }
   };
 
@@ -216,12 +206,14 @@ export const Timeline: React.FC<TimelineProps> = ({
         const deltaX = (e.clientX - trimmingClip.startX) / zoom;
         if (trimmingClip.edge === 'start') {
           // Adjust start time & duration
-          const maxLeftShift = trimmingClip.originalStartTime;
+          const sourceClip=clips.find(c=>c.id===trimmingClip.id);
+          const hasSourceTime=sourceClip && ['video','audio'].includes(sourceClip.type);
+          const maxLeftShift = hasSourceTime ? Math.min(trimmingClip.originalStartTime,trimmingClip.originalOffset) : trimmingClip.originalStartTime;
           const maxRightShift = trimmingClip.originalDuration - 0.5; // at least 0.5s duration
           const clampedDelta = Math.max(-maxLeftShift, Math.min(maxRightShift, deltaX));
           const newStart = Math.round((trimmingClip.originalStartTime + clampedDelta) * 10) / 10;
           const newDuration = Math.round((trimmingClip.originalDuration - clampedDelta) * 10) / 10;
-          onUpdateClip(trimmingClip.id, { startTime: newStart, duration: newDuration });
+          onUpdateClip(trimmingClip.id, { startTime: newStart, duration: newDuration, ...(hasSourceTime?{offset:Math.max(0,Math.round((trimmingClip.originalOffset+clampedDelta)*10)/10)}:{}) });
         } else {
           // Adjust duration from right
           const newDuration = Math.max(0.5, Math.round((trimmingClip.originalDuration + deltaX) * 10) / 10);
@@ -506,12 +498,13 @@ export const Timeline: React.FC<TimelineProps> = ({
                 <div
                   key={marker.id}
                   style={{ left: `${marker.time * zoom}px` }}
+                  onMouseDown={e=>e.stopPropagation()}
                   onClick={e => {
                     e.stopPropagation();
                     onSeek(marker.time);
                     setActiveMarkerEdit(marker);
                   }}
-                  className="absolute top-0 bottom-0 flex flex-col items-center cursor-pointer group z-30 -translate-x-1/2"
+                  className="absolute top-0 bottom-0 flex flex-col items-center cursor-pointer group z-50 -translate-x-1/2"
                   title={`${marker.name}: ${marker.description || 'Clicca per modificare la descrizione'}`}
                 >
                   <div
@@ -568,6 +561,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                 return (
                   <div
                     key={track.id}
+                    data-track-id={track.id}
                     style={{ height: `${TRACK_ROW_HEIGHT}px` }}
                     onDragOver={e => {
                       e.preventDefault();
@@ -638,6 +632,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                         return (
                           <div
                             key={clip.id}
+                            data-clip-id={clip.id}
                             style={{
                               left: `${clipLeft}px`,
                               width: `${clipWidth}px`,
@@ -693,6 +688,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                                   startX: e.clientX,
                                   originalStartTime: clip.startTime,
                                   originalDuration: clip.duration,
+                                  originalOffset: clip.offset || 0,
                                 });
                               }}
                               className="absolute left-0 top-0 bottom-0 w-2.5 bg-black/40 hover:bg-white text-black opacity-0 group-hover:opacity-100 cursor-ew-resize flex items-center justify-center z-40 transition-opacity rounded-l"
@@ -711,6 +707,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                                   startX: e.clientX,
                                   originalStartTime: clip.startTime,
                                   originalDuration: clip.duration,
+                                  originalOffset: clip.offset || 0,
                                 });
                               }}
                               className="absolute right-0 top-0 bottom-0 w-2.5 bg-black/40 hover:bg-white text-black opacity-0 group-hover:opacity-100 cursor-ew-resize flex items-center justify-center z-40 transition-opacity rounded-r"
@@ -800,6 +797,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                         return (
                           <div
                             key={clip.id}
+                            data-clip-id={clip.id}
                             style={{
                               left: `${clipLeft}px`,
                               width: `${clipWidth}px`,
@@ -858,6 +856,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                                   startX: e.clientX,
                                   originalStartTime: clip.startTime,
                                   originalDuration: clip.duration,
+                                  originalOffset: clip.offset || 0,
                                 });
                               }}
                               className="absolute left-0 top-0 bottom-0 w-2.5 bg-black/40 hover:bg-white text-black opacity-0 group-hover:opacity-100 cursor-ew-resize flex items-center justify-center z-40 transition-opacity rounded-l"
@@ -876,6 +875,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                                   startX: e.clientX,
                                   originalStartTime: clip.startTime,
                                   originalDuration: clip.duration,
+                                  originalOffset: clip.offset || 0,
                                 });
                               }}
                               className="absolute right-0 top-0 bottom-0 w-2.5 bg-black/40 hover:bg-white text-black opacity-0 group-hover:opacity-100 cursor-ew-resize flex items-center justify-center z-40 transition-opacity rounded-r"
@@ -933,6 +933,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                         return (
                           <div
                             key={clip.id}
+                            data-clip-id={clip.id}
                             style={{
                               left: `${clipLeft}px`,
                               width: `${clipWidth}px`,
@@ -991,6 +992,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                                   startX: e.clientX,
                                   originalStartTime: clip.startTime,
                                   originalDuration: clip.duration,
+                                  originalOffset: clip.offset || 0,
                                 });
                               }}
                               className="absolute left-0 top-0 bottom-0 w-2.5 bg-black/40 hover:bg-white text-black opacity-0 group-hover:opacity-100 cursor-ew-resize flex items-center justify-center z-40 transition-opacity rounded-l"
@@ -1009,6 +1011,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                                   startX: e.clientX,
                                   originalStartTime: clip.startTime,
                                   originalDuration: clip.duration,
+                                  originalOffset: clip.offset || 0,
                                 });
                               }}
                               className="absolute right-0 top-0 bottom-0 w-2.5 bg-black/40 hover:bg-white text-black opacity-0 group-hover:opacity-100 cursor-ew-resize flex items-center justify-center z-40 transition-opacity rounded-r"
@@ -1067,6 +1070,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                         return (
                           <div
                             key={clip.id}
+                            data-clip-id={clip.id}
                             style={{
                               left: `${clipLeft}px`,
                               width: `${clipWidth}px`,
@@ -1122,6 +1126,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                                   startX: e.clientX,
                                   originalStartTime: clip.startTime,
                                   originalDuration: clip.duration,
+                                  originalOffset: clip.offset || 0,
                                 });
                               }}
                               className="absolute left-0 top-0 bottom-0 w-2.5 bg-black/40 hover:bg-black text-white opacity-0 group-hover:opacity-100 cursor-ew-resize flex items-center justify-center z-40 transition-opacity rounded-l"
@@ -1140,6 +1145,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                                   startX: e.clientX,
                                   originalStartTime: clip.startTime,
                                   originalDuration: clip.duration,
+                                  originalOffset: clip.offset || 0,
                                 });
                               }}
                               className="absolute right-0 top-0 bottom-0 w-2.5 bg-black/40 hover:bg-black text-white opacity-0 group-hover:opacity-100 cursor-ew-resize flex items-center justify-center z-40 transition-opacity rounded-r"
@@ -1259,14 +1265,14 @@ export const Timeline: React.FC<TimelineProps> = ({
 
       {/* Modal: Aggiungi Nuova Pista */}
       {isAddTrackOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+        <div role="dialog" aria-label="Nuova traccia" className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="w-full max-w-sm bg-[#101625] border border-[#2d3b55] rounded-xl shadow-2xl p-4 text-white">
             <div className="flex items-center justify-between pb-2 border-b border-[#212d45] mb-3">
               <h4 className="font-bold text-sm text-cyan-300 flex items-center gap-2">
                 <Plus className="w-4 h-4" />
                 Aggiungi Nuova Pista
               </h4>
-              <button onClick={() => setIsAddTrackOpen(false)} className="text-gray-400 hover:text-white">
+              <button aria-label="Chiudi nuova traccia" onClick={() => setIsAddTrackOpen(false)} className="text-gray-400 hover:text-white">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -1363,14 +1369,14 @@ export const Timeline: React.FC<TimelineProps> = ({
 
       {/* Modal: Modifica / Descrizione Marker */}
       {activeMarkerEdit && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+        <div role="dialog" aria-label="Dettagli marker" className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="w-full max-w-sm bg-[#101625] border border-[#2d3b55] rounded-xl shadow-2xl p-4 text-white">
             <div className="flex items-center justify-between pb-2 border-b border-[#212d45] mb-3">
               <h4 className="font-bold text-sm text-amber-400 flex items-center gap-1.5">
                 <Flag className="w-4 h-4 fill-amber-400" />
                 Dettagli Marker ({activeMarkerEdit.time.toFixed(1)}s)
               </h4>
-              <button onClick={() => setActiveMarkerEdit(null)} className="text-gray-400 hover:text-white">
+              <button aria-label="Chiudi marker" onClick={() => setActiveMarkerEdit(null)} className="text-gray-400 hover:text-white">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -1405,6 +1411,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                   {['#f59e0b', '#ef4444', '#10b981', '#3b82f6', '#8b5cf6'].map(col => (
                     <button
                       key={col}
+                      aria-label={`Colore ${col}`}
                       type="button"
                       onClick={() => setActiveMarkerEdit({ ...activeMarkerEdit, color: col })}
                       style={{ backgroundColor: col }}
@@ -1490,6 +1497,8 @@ export const Timeline: React.FC<TimelineProps> = ({
                 </button>
               ) : (
                 <button
+                  disabled={!linkCandidate(contextMenu.clip)}
+                  title={linkCandidate(contextMenu.clip)?'Collega video e audio':'Nessuna clip audio/video compatibile'}
                   type="button"
                   onClick={() => {
                     handleLinkVideoAudio(contextMenu.clip);
@@ -1498,7 +1507,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                   className="w-full text-left px-2.5 py-1.5 rounded hover:bg-[#1a253a] text-cyan-300 hover:text-cyan-200 flex items-center gap-2 transition-colors cursor-pointer"
                 >
                   <Link2 className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>Unisci il video dall'audio</span>
+                  <span>Unisci video e audio</span>
                 </button>
               )}
             </>

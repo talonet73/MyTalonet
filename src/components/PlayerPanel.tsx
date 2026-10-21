@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
   Menu,
   Play,
@@ -39,6 +39,8 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
   isMuted,
   onToggleMute,
 }) => {
+  const [menuOpen,setMenuOpen]=useState(false);
+  const [playerError,setPlayerError]=useState('');
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -57,7 +59,9 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
       id: c.id,
       name: c.name,
       transparency: c.transparency,
+      effects: c.effects, adjustments: c.adjustments,
       volumeDb: c.volumeDb,
+      fadeIn:c.fadeIn,fadeOut:c.fadeOut,
       layer: clips.indexOf(c),
       startTime: c.startTime,
       duration: c.duration,
@@ -74,6 +78,7 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
       id: c.id,
       name: c.name,
       volumeDb: c.volumeDb,
+      fadeIn:c.fadeIn,fadeOut:c.fadeOut,
       startTime: c.startTime,
       duration: c.duration,
       offset: c.offset,
@@ -98,7 +103,9 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
       id: c.id,
       name: c.name,
       transparency: c.transparency,
+      effects: c.effects, adjustments: c.adjustments,
       volumeDb: c.volumeDb,
+      fadeIn:c.fadeIn,fadeOut:c.fadeOut,
       layer: clips.indexOf(c),
       startTime: c.startTime,
       duration: c.duration,
@@ -140,13 +147,15 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
       ? 'aspect-square max-h-56'
       : 'aspect-[4/3]';
 
-  const toggleFullscreen = () => {
+  const toggleFullscreen = async () => {
+    try {
     if (!containerRef.current) return;
     if (document.fullscreenElement) {
-      document.exitFullscreen();
+      await document.exitFullscreen();
     } else {
-      containerRef.current.requestFullscreen();
+      await containerRef.current.requestFullscreen();
     }
+    } catch { setPlayerError('Schermo intero non disponibile in questa finestra.'); }
   };
 
   return (
@@ -157,9 +166,10 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-[#1e293b] text-xs">
         <span className="font-semibold text-gray-300">Player</span>
-        <Menu className="w-3.5 h-3.5 text-gray-400 hover:text-white cursor-pointer" />
+        <div className="relative"><button aria-label="Opzioni player" aria-expanded={menuOpen} onClick={()=>setMenuOpen(p=>!p)}><Menu className="w-3.5 h-3.5"/></button>{menuOpen && <div className="absolute right-0 top-5 z-20 bg-slate-800 border border-slate-600 rounded w-44 p-2 space-y-2"><button className="block" onClick={()=>{onSeek(0);setMenuOpen(false);}}>Vai all’inizio</button><button className="block" onClick={()=>{void toggleFullscreen();setMenuOpen(false);}}>Apri schermo intero</button></div>}</div>
       </div>
 
+      {playerError && <button role="alert" onClick={()=>setPlayerError('')} className="text-xs text-rose-300 p-2">{playerError}</button>}
       {/* Video Screen Area */}
       <div className="flex-1 flex items-center justify-center p-2 bg-[#0a0d14] relative overflow-hidden">
         <div className={`relative ${aspectClass} w-full max-w-full flex items-center justify-center shadow-2xl rounded border border-[#1e293b] bg-black overflow-hidden`}>
@@ -173,6 +183,7 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
           {/* Quick Play Overlay Button if Paused */}
           {!isPlaying && (
             <button
+              aria-label={isPlaying ? 'Pausa anteprima' : 'Riproduci anteprima'}
               onClick={onTogglePlay}
               className="absolute w-12 h-12 rounded-full bg-cyan-600/80 hover:bg-cyan-500 text-white flex items-center justify-center shadow-lg transition-transform hover:scale-105"
             >

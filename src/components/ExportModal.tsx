@@ -66,6 +66,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     return estimateExportFileSizeMB(format, contentDuration, weightPercentage, resolution);
   }, [format, contentDuration, weightPercentage, resolution]);
 
+  useEffect(() => { if(isOpen){setExportedResult(null);setExportError('');setProgress(null);} },[isOpen]);
+
   // When modal opens, draw current initial frame on canvas
   useEffect(() => {
     if (!isOpen) return;
@@ -78,6 +80,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         id: c.id,
         name: c.name,
         transparency: c.transparency,
+      effects: c.effects, adjustments: c.adjustments, fadeIn:c.fadeIn, fadeOut:c.fadeOut,
         layer: clips.indexOf(c),
         startTime: c.startTime,
         duration: c.duration,
@@ -103,6 +106,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         id: c.id,
         name: c.name,
         transparency: c.transparency,
+      effects: c.effects, adjustments: c.adjustments, fadeIn:c.fadeIn, fadeOut:c.fadeOut,
         layer: clips.indexOf(c),
         startTime: c.startTime,
         duration: c.duration,
@@ -194,7 +198,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-150 select-none">
+    <div role="dialog" aria-label="Esportazione" className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-150 select-none">
       <div className="w-full max-w-xl bg-[#0e1422] border border-[#2b3a54] rounded-2xl shadow-2xl p-5 text-white flex flex-col max-h-[94vh] overflow-hidden">
         {/* Modal Header */}
         <div className="flex items-center justify-between pb-3 border-b border-[#1f2a3f] mb-3 shrink-0">
@@ -208,6 +212,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             </div>
           </div>
           <button
+            aria-label="Chiudi esportazione"
             onClick={onClose}
             disabled={isExporting}
             className="text-gray-400 hover:text-white p-1 rounded-md hover:bg-[#1a2334] transition-colors disabled:opacity-40"
@@ -308,7 +313,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-cyan-300 font-bold">
                     <Sliders className="w-4 h-4 text-cyan-400" />
-                    <span>Barra Regolazione Peso File ed Encoding</span>
+                    <span>{format==='wav'?'WAV PCM: qualità e peso fissi':'Barra Regolazione Peso File ed Encoding'}</span>
                   </div>
                   <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-cyan-950 text-cyan-300 font-mono text-[11px] font-bold border border-cyan-800">
                     <HardDrive className="w-3.5 h-3.5" />
@@ -323,8 +328,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     min="1"
                     max="100"
                     value={weightPercentage}
+                    aria-label="Peso del file"
                     onChange={e => setWeightPercentage(Number(e.target.value))}
-                    disabled={isExporting}
+                    disabled={isExporting || format==='wav'}
                     className="w-full h-2.5 bg-[#1e293b] rounded-lg appearance-none cursor-pointer accent-cyan-400"
                   />
                   <div className="flex justify-between text-[10px] text-gray-400 font-medium">

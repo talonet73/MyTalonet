@@ -55,12 +55,14 @@ Il test browser provoca un errore 403 controllato e successivamente carica un ve
 ## Esito finale dei comandi eseguiti
 
 - `npm run lint`: **PASS**, controllo TypeScript.
-- `npm test`: **PASS, 19/19**, inclusa la trascrizione reale via API, export, mix, immagini, mute/solo e MCP HTTP/SSE.
+- `npm test`: **PASS, 24/24**, inclusa la trascrizione reale via API, export, mix, immagini, mute/solo e MCP HTTP/SSE.
 - `npm run test:whisper`: **PASS**, riconoscimento di parlato noto e assenza di testo sul silenzio.
-- `npm run test:e2e`: **PASS, 3/3** test browser, inclusi fallback locale dopo 403 e download dell’export reale.
+- `npm run test:e2e`: **PASS, 12/12** test browser, inclusi fallback locale dopo 403 e download dell’export reale.
 - `git diff --check`: **PASS**, verifica formale delle modifiche.
 - `pip check`: **PASS**, nessun requisito incompatibile.
 - Build produzione eseguita dal runner browser: **PASS**.
 - Downloader YouTube reale: **BLOCCATO**, risposta `PROXY_FORBIDDEN`, avanzamento 0%, nessun file importato; chiusa la diagnosi senza ulteriori tentativi di aggiramento.
 
 Restano limiti esterni distinti dalla regressione locale: download YouTube rifiutato dal proxy e collegamento effettivo di un account ChatGPT, che richiede un endpoint HTTPS pubblico e configurazione dell’account. I test MCP verificano i trasporti e le modifiche reali alla timeline tramite SDK, non la connessione di un account ChatGPT.
+
+Controllo aggiuntivo di Effects, Transitions, Captions, Adjustment e degli altri pulsanti: [matrice e risultati](toolbar-verification.md).

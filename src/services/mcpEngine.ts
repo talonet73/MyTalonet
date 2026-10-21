@@ -8,7 +8,7 @@ export interface MCPToolCallResult {
   updatedTracks?: Track[];
   updatedTime?: number;
   updatedSubtitles?: SubtitleItem[];
-  selectedClipId?: string;
+  selectedClipId?: string | null;
 }
 
 export const CLAUDE_MCP_CONFIG = {
@@ -184,13 +184,18 @@ export function executeClaudePrompt(
 
   // 5. Add Effect / Aggiungi Effetto
   if (text.includes('effetto') || text.includes('effect') || text.includes('camera') || text.includes('glitch') || text.includes('blur')) {
+    const clock=text.match(/(\d{1,2}):(\d{2})/);
+    const start=clock ? Number(clock[1])*60+Number(clock[2]) : currentTime;
+    const visual=clips.find(c=>['video','image'].includes(c.type) && start>=c.startTime && start<c.startTime+c.duration);
+    if(!visual)return {message:'Nessun video o immagine al tempo richiesto: aggiungi una clip o sposta il cursore.'};
+    const effectTrack=tracks.find(t=>t.type==='effect') || {id:crypto.randomUUID(),name:'EFFECTS',type:'effect' as const,isSolo:false,isMuted:false,headerBg:'#35121b',laneBg:'#1e141a'};
     const newEffect: TimelineClip = {
       id: `effect_${Date.now()}`,
       name: text.includes('glitch') ? 'Glitch Cyber' : text.includes('blur') ? 'Motion Blur' : 'Camera Handed FX',
-      trackId: 'track_effects',
+      trackId: effectTrack.id,
       type: 'effect',
-      startTime: Math.round(currentTime * 10) / 10,
-      duration: 6.0,
+      startTime: start,
+      duration: Math.min(6,visual.startTime+visual.duration-start),
       offset: 0,
       color: '#d9534f',
       transparency: 100,
@@ -202,7 +207,8 @@ export function executeClaudePrompt(
 
     const updated = [...clips, newEffect];
     return {
-      message: `Aggiunto nuovo effetto "${newEffect.name}" sulla pista rossa EFFECTS a ${formatTimecode(currentTime)} con maniglie di dissolvenza laterali attive.`,
+      message: `Aggiunto nuovo effetto "${newEffect.name}" sulla pista rossa EFFECTS a ${formatTimecode(start)} con maniglie di dissolvenza laterali attive.`,
+      updatedTracks: tracks.some(t=>t.id===effectTrack.id)?tracks:[...tracks,effectTrack],
       actionExecuted: `add_effect("${newEffect.name}")`,
       updatedClips: updated,
       selectedClipId: newEffect.id
@@ -211,20 +217,15 @@ export function executeClaudePrompt(
 
   // 6. Subtitles / Sottotitoli
   if (text.includes('sottotitol') || text.includes('caption') || text.includes('traduci') || text.includes('lingua')) {
-    return { message: 'Trascrizione automatica non configurata. Nessun sottotitolo è stato generato.', actionExecuted: undefined };
+    return { message: 'Apri il pannello Captions e premi GENERATE per trascrivere realmente l’audio della timeline.', actionExecuted: undefined };
   }
 
   // 7. Delete / Elimina / Cestino
   if (text.includes('elimina') || text.includes('cancella') || text.includes('delete') || text.includes('cestino')) {
     if (selectedClipId) {
       const deletedClip = clips.find(c => c.id === selectedClipId);
-      const updated = clips.filter(c => c.id !== selectedClipId);
-      return {
-        message: `Clip "${deletedClip?.name || selectedClipId}" rimossa con successo dalla timeline.`,
-        actionExecuted: `delete_clip(${selectedClipId})`,
-        updatedClips: updated,
-        selectedClipId: undefined
-      };
+      const result=applyTimelineTool({clips,tracks,currentTime,selectedClipId,subtitles,mediaAssets:[],aspectRatio:'16:9'},'delete_clip',{});
+      return {message:`Clip "${deletedClip?.name || selectedClipId}" rimossa dalla timeline.`,actionExecuted:'delete_clip',updatedClips:result.clips,selectedClipId:null};
     } else {
       return {
         message: "Nessuna clip attualmente selezionata. Seleziona prima un mattoncino sulla timeline per eliminarlo.",

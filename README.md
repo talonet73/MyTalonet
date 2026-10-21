@@ -22,9 +22,22 @@ npm run build
 NODE_ENV=production npm start
 ```
 
-Importa i media con **Importa** nella barra superiore o **Import** nello stage. I file sono verificati con ffprobe e salvati con nomi univoci in `media_downloads/` (oppure `MEDIA_DIR`). Doppio clic sul media per aggiungerlo alla timeline al cursore. I video con audio creano una coppia video/audio collegata. Taglio, spostamento, copia e duplicazione mantengono la coppia sincronizzata. Le immagini sono accettate anche sulle tracce audio, come nell’interfaccia originale.
+Importa i media con **Importa** nella barra superiore o **Import** nello stage. I file sono verificati con ffprobe e salvati con nomi univoci in `media_downloads/` (oppure `MEDIA_DIR`). Doppio clic sul media per aggiungerlo alla timeline al cursore. I video con audio creano una coppia video/audio collegata. Taglio, spostamento, copia e duplicazione mantengono la coppia sincronizzata. Le immagini entrano nella traccia IMMAGINI o in una traccia video, anche tramite trascinamento. Le tracce audio rimangono compatibili con le immagini dei progetti precedenti.
 
 I progetti `.tal` conservano timeline, proporzioni e riferimenti ai file sul server; non incorporano i media. Conserva la cartella media insieme ai progetti. Usa **Salva** prima di chiudere: la timeline condivisa MCP è in memoria e non sopravvive al riavvio del server. Le vecchie URL `blob:` scadute richiedono la reimportazione del file originale.
+
+## Strumenti di montaggio
+
+Seleziona prima una clip nella timeline. I quattro pulsanti aprono pannelli reali, richiudibili con la X o cliccando nuovamente il pulsante.
+
+- **Effects**: Camera a mano, Zoom in, Zoom out, Luce morbida, Vintage, Cinema, Bianco e nero, Sfocatura. Puoi combinare gli effetti; Zoom in e Zoom out si escludono. Gli zoom cambiano durante la riproduzione. **Rimuovi effetti** ripristina la clip.
+- **Transitions**: dissolvenza in entrata/uscita, con durata scelta, oppure dissolvenza incrociata. Per quest’ultima accosta due clip sulla stessa traccia e seleziona la seconda: le clip vengono sovrapposte e quelle successive della stessa traccia, con l’audio collegato, vengono anticipate. L’audio viene sfumato e il video entrante si sovrappone a quello uscente senza un passaggio intermedio al nero.
+- **Captions**: apre il pannello per scegliere la lingua, generare sottotitoli reali con Whisper, correggere i testi ed eliminare righe. La traduzione disponibile è verso l’inglese.
+- **Adjustment**: luminosità, contrasto, saturazione, esposizione, temperatura, tinta e nitidezza della clip selezionata. **Ripristina regolazioni** riporta i valori iniziali.
+
+Effetti, regolazioni e dissolvenze sono conservati nei progetti `.tal` e applicati sia all’anteprima sia all’esportazione. Le impostazioni operano sulla singola clip selezionata; gli effetti globali dei progetti precedenti rimangono supportati. L’anteprima usa una risoluzione ridotta, l’export quella scelta.
+
+I comandi non disponibili (ad esempio Cestino senza selezione o Incolla prima di Copia) sono disabilitati. I menu File/Edit e i comandi principali usano le stesse operazioni effettive. Annulla/Ripristina conserva clip e tracce: eliminare una traccia e poi annullare non lascia clip senza traccia. Il taglio da sinistra aggiorna anche il punto della sorgente e l’audio collegato.
 
 ## Export
 
@@ -86,3 +99,5 @@ npm run test:whisper
 `tests/fixtures/jfk.wav` proviene dal repository ufficiale whisper.cpp; fonte e hash sono in `tests/fixtures/README.md`.
 
 Risultati delle verifiche e diagnosi dei domini: [docs/verification.md](docs/verification.md).
+
+Controllo della barra e matrice dei pulsanti verificati: [docs/toolbar-verification.md](docs/toolbar-verification.md).

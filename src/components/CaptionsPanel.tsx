@@ -44,6 +44,7 @@ export const CaptionsPanel: React.FC<CaptionsPanelProps> = ({
             <Languages className="w-3.5 h-3.5 text-gray-400" />
           </label>
           <select
+            aria-label="Lingua parlata"
             value={spokenLanguage}
             onChange={e => setSpokenLanguage(e.target.value)}
             className="w-full bg-[#1f2638] border border-[#2e384d] text-xs text-gray-200 rounded px-2.5 py-1.5 focus:outline-none focus:border-cyan-500"
@@ -67,6 +68,8 @@ export const CaptionsPanel: React.FC<CaptionsPanelProps> = ({
           </div>
           <button
             type="button"
+            aria-label="Traduzione in inglese"
+            aria-pressed={bilingualCaptions}
             onClick={() => setBilingualCaptions(!bilingualCaptions)}
             className={`w-9 h-5 rounded-full transition-colors relative ${
               bilingualCaptions ? 'bg-cyan-500' : 'bg-[#2b354c]'
@@ -107,6 +110,7 @@ export const CaptionsPanel: React.FC<CaptionsPanelProps> = ({
                 </div>
                 <input
                   type="text"
+                  aria-label="Testo sottotitolo"
                   value={sub.text}
                   onChange={e => onUpdateSubtitle(sub.id, e.target.value)}
                   className="bg-transparent border-b border-transparent focus:border-cyan-500 text-gray-200 text-xs focus:outline-none"

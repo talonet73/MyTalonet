@@ -1,3 +1,4 @@
+import type { VisualEffect, Adjustments } from '../services/visualSettings';
 export type TrackType = 'effect' | 'video' | 'audio' | 'image';
 
 export interface TimelineMarker {
@@ -22,7 +23,9 @@ export interface TimelineClip {
   volumeDb: number; // -60 to +12 dB for audio
   fadeIn: number; // in seconds for effects
   fadeOut: number; // in seconds for effects
-  effectType?: 'camera_shake' | 'glow' | 'blur' | 'glitch' | 'vintage' | 'cinematic' | 'dissolvenza';
+  effectType?: 'camera_shake' | 'glow' | 'blur' | 'glitch' | 'vintage' | 'cinematic' | 'dissolvenza' | 'zoom_in' | 'zoom_out' | 'monochrome';
+  effects?: VisualEffect[];
+  adjustments?: Adjustments;
   mediaUrl?: string;
   mediaThumbnail?: string;
   subtitles?: string;

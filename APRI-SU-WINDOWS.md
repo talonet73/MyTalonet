@@ -17,6 +17,8 @@ Se compare un blocco di sicurezza di Windows, controlla provenienza e messaggio 
 
 Il primo file usa il programma di installazione di Windows per Node.js LTS, Python 3.12, FFmpeg e i componenti Microsoft necessari. Rimangono attive le verifiche normali delle fonti e dei pacchetti. Il secondo installa le versioni dell’app conservate nel progetto, usa PyAV 16.1.0 e salva il modello vocale nella cartella personale di Windows. Non serve un abbonamento a servizi di riconoscimento vocale.
 
-L’app e stata avviata e verificata realmente nel browser dell’ambiente Linux di sviluppo, con 19 test principali e 3 prove browser superate. Non e disponibile una macchina Windows in questo ambiente: la procedura di installazione Windows e predisposta, ma non e stata eseguita su Windows. Un eventuale errore specifico di quel sistema va verificato sulla macchina interessata.
+L’app e stata avviata e verificata realmente nel browser dell’ambiente Linux di sviluppo, con 24 test principali e 12 prove browser superate. Non e disponibile una macchina Windows in questo ambiente: la procedura di installazione Windows e predisposta, ma non e stata eseguita su Windows. Un eventuale errore specifico di quel sistema va verificato sulla macchina interessata.
 
 YouTube diretto rimane soggetto alle restrizioni di rete. Il pulsante **Carica video locale**, presente nella finestra YouTube, consente di importare un file gia sul tuo computer. Nessun blocco viene aggirato.
+
+Per usare i nuovi strumenti, seleziona una clip nella timeline, poi premi Effects, Transitions, Captions o Adjustment. Se avevi scaricato una versione precedente, scarica nuovamente la cartella aggiornata e riaprila con 2-AVVIA-TALEDIT.cmd.

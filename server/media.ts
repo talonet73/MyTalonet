@@ -4,13 +4,15 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
+import { visualFilters } from './visualFilters';
+import { ADJUSTMENTS, EFFECTS } from '../src/services/visualSettings';
 import type { TimelineClip, Track, SubtitleItem } from '../src/types/editor';
 
 const runFile = promisify(execFile);
 export const downloadsDir = path.resolve(process.env.MEDIA_DIR || 'media_downloads');
 export class InputError extends Error {}
-export async function run(command: string, args: string[], timeout = 300_000) {
-  return runFile(command, args, { timeout, maxBuffer: 8 * 1024 * 1024 });
+export async function run(command: string, args: string[], timeout = 300_000, cwd?: string) {
+  return runFile(command, args, { timeout, cwd, maxBuffer: 8 * 1024 * 1024 });
 }
 export async function probe(file: string) {
   const { stdout } = await run('ffprobe', ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', file]);
@@ -61,6 +63,14 @@ export async function exportMedia(body: any) {
     number(clip.startTime, 0, 0, 86400); number(clip.duration, 0, 0.001, 86400); number(clip.offset, 0, 0, 86400);
     number(clip.volumeDb, 0, -60, 12); number(clip.transparency, 100, 0, 100);
     number(clip.fadeIn, 0, 0, 600); number(clip.fadeOut, 0, 0, 600);
+    if (clip.effects !== undefined && (!Array.isArray(clip.effects) || clip.effects.length > 12 || clip.effects.some((e:string) => ![...EFFECTS.map(e=>e.type),'glitch'].includes(e as any)))) throw new InputError('Effetto visivo non valido.');
+    if (clip.adjustments !== undefined) {
+      if (!clip.adjustments || typeof clip.adjustments !== 'object' || Array.isArray(clip.adjustments)) throw new InputError('Regolazioni non valide.');
+      for (const [key,value] of Object.entries(clip.adjustments)) {
+        if (!ADJUSTMENTS.some(a=>a.key===key)) throw new InputError('Regolazione non supportata.');
+        number(value,0,key==='sharpness'?0:-100,100);
+      }
+    }
     if (!['video', 'audio', 'image', 'effect'].includes(clip.type)) throw new InputError('Tipo di clip non valido.');
   }
   const audioOnly = ['wav', 'mp3'].includes(format);
@@ -95,7 +105,7 @@ export async function exportMedia(body: any) {
     filters.push('[0:v]setpts=PTS-STARTPTS[base]'); input++;
   }
   const audioTags: string[] = [];
-  for (const clip of resolved) {
+  for (const clip of resolved.sort((a,b)=>a.startTime-b.startTime)) {
     const visual = !audioOnly && (clip.type === 'video' || clip.type === 'image');
     const separateAudio = clip.type === 'video' && (clip.linkedClipId || body.clips.some((c: TimelineClip) => c.type === 'audio' && c.linkedClipId === clip.id));
     const audible = (clip.type === 'audio' || (clip.type === 'video' && !separateAudio)) && clip.info.streams.some((s: any) => s.codec_type === 'audio');
@@ -107,7 +117,7 @@ export async function exportMedia(body: any) {
     if (visual) {
       const v = `v${idx}`, next = `layer${idx}`;
       const alpha = (clip.transparency ?? 100) / 100;
-      filters.push(`[${idx}:v]setpts=PTS-STARTPTS,scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black@0,setsar=1,format=rgba,colorchannelmixer=aa=${alpha},setpts=PTS+${clip.startTime}/TB[${v}]`);
+      filters.push(`[${idx}:v]${visualFilters(clip,width,height)}[${v}]`);
       filters.push(`[${layer}][${v}]overlay=eof_action=pass:repeatlast=0:enable='gte(t,${clip.startTime})*lt(t,${clip.startTime + clip.duration})'[${next}]`); layer = next;
     }
     if (audible) {
@@ -149,13 +159,18 @@ export async function exportMedia(body: any) {
     if (!audioOnly) {
       const subtitles: SubtitleItem[] = body.subtitles || [];
       if (!Array.isArray(subtitles) || subtitles.length > 1000) throw new InputError('Sottotitoli non validi.');
+      let font='';
+      if(subtitles.length) {
+        const candidates=[path.join(process.env.WINDIR || 'C:\\Windows','Fonts','arial.ttf'),'/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf','/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf','/System/Library/Fonts/Supplemental/Arial.ttf'];
+        for(const candidate of candidates) {try {await fs.copyFile(candidate,path.join(temp,'font.ttf'));font=":fontfile='font.ttf'";break;}catch{/* Try the next platform font. */}}
+      }
       for (const [i, sub] of subtitles.entries()) {
         if (typeof sub.text !== 'string' || sub.text.length > 10000) throw new InputError('Testo sottotitolo non valido.');
         const start = number(sub.startTime, 0, 0, 86400), end = number(sub.endTime, 0, start, 86400);
         const textPath = path.join(temp, `${i}.txt`);
         await fs.writeFile(textPath, sub.text);
         const next = `sub${i}`;
-        filters.push(`[${layer}]drawtext=textfile='${textPath}':expansion=none:fontsize=${Math.round(height / 24)}:fontcolor=yellow:box=1:boxcolor=black@0.75:boxborderw=8:x=(w-text_w)/2:y=h-text_h-30:enable='gte(t,${start})*lt(t,${end})'[${next}]`); layer = next;
+        filters.push(`[${layer}]drawtext=textfile='${i}.txt'${font}:expansion=none:fontsize=${Math.round(height / 24)}:fontcolor=yellow:box=1:boxcolor=black@0.75:boxborderw=8:x=(w-text_w)/2:y=h-text_h-30:enable='gte(t,${start})*lt(t,${end})'[${next}]`); layer = next;
       }
     }
     args.push('-filter_complex', filters.join(';'));
@@ -165,7 +180,7 @@ export async function exportMedia(body: any) {
     if (['mp4','mov'].includes(format)) args.push('-movflags', '+faststart');
     args.push('-t', String(duration), output);
     await fs.mkdir(downloadsDir, { recursive: true });
-    await run('ffmpeg', args);
+    await run('ffmpeg', args, 300_000, temp);
     const info = await probe(output);
     if (!info.streams.some((s: any) => s.codec_type === (audioOnly ? 'audio' : 'video'))) throw new Error('Export privo del flusso richiesto.');
     const stats = await fs.stat(output);

@@ -16,7 +16,7 @@ export const DetailsPanel: React.FC<DetailsPanelProps> = ({
   const currentTrack = tracks.find(t => t.id === selectedClip?.trackId);
 
   return (
-    <div className="w-64 bg-[#111622] text-white p-3.5 border-l border-[#1e293b] flex flex-col justify-between text-xs select-none">
+    <div className="w-full h-full overflow-y-auto bg-[#111622] text-white p-3.5 border-l border-[#1e293b] flex flex-col justify-between text-xs select-none">
       <div>
         {/* Header */}
         <div className="flex items-center justify-between pb-2 border-b border-[#232c40] mb-3">
@@ -98,7 +98,7 @@ export const DetailsPanel: React.FC<DetailsPanelProps> = ({
                 <div className="mt-1.5 space-y-1">
                   <div className="flex justify-between text-[11px] font-mono">
                     <span className={selectedClip.type === 'image' ? 'text-amber-400' : 'text-cyan-400'}>
-                      Trasparenza:
+                      Opacità:
                     </span>
                     <span className="font-bold text-white">{selectedClip.transparency}%</span>
                   </div>
@@ -151,7 +151,7 @@ export const DetailsPanel: React.FC<DetailsPanelProps> = ({
                       min="0"
                       max={selectedClip.duration / 2}
                       value={selectedClip.fadeIn}
-                      onChange={e => onUpdateClip({ fadeIn: parseFloat(e.target.value) || 0 })}
+                      onChange={e => onUpdateClip({ fadeIn: Math.max(0,Math.min(selectedClip.duration/2,parseFloat(e.target.value) || 0)) })}
                       className="w-16 bg-[#1a2030] border border-[#2d3748] rounded px-1.5 py-0.5 text-right text-xs text-white"
                     />
                     <span className="text-[10px] text-gray-400">s</span>
@@ -167,7 +167,7 @@ export const DetailsPanel: React.FC<DetailsPanelProps> = ({
                       min="0"
                       max={selectedClip.duration / 2}
                       value={selectedClip.fadeOut}
-                      onChange={e => onUpdateClip({ fadeOut: parseFloat(e.target.value) || 0 })}
+                      onChange={e => onUpdateClip({ fadeOut: Math.max(0,Math.min(selectedClip.duration/2,parseFloat(e.target.value) || 0)) })}
                       className="w-16 bg-[#1a2030] border border-[#2d3748] rounded px-1.5 py-0.5 text-right text-xs text-white"
                     />
                     <span className="text-[10px] text-gray-400">s</span>

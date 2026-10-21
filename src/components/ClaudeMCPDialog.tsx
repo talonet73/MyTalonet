@@ -71,7 +71,7 @@ export const ClaudeMCPDialog: React.FC<ClaudeMCPDialogProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+    <div role="dialog" aria-label="Collegamento MCP" className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
       <div className="w-full max-w-2xl bg-[#0f1523] border border-[#2b3952] rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 bg-[#131b2d] border-b border-[#232f46]">
@@ -114,6 +114,7 @@ export const ClaudeMCPDialog: React.FC<ClaudeMCPDialogProps> = ({
             </div>
 
             <button
+              aria-label="Chiudi collegamento MCP"
               onClick={onClose}
               className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-[#1f2b42] transition-colors"
             >

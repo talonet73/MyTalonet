@@ -4,6 +4,8 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { EditingToolsPanel } from './components/EditingToolsPanel';
+import { applyCrossDissolve } from './services/visualSettings';
 import { TopNav } from './components/TopNav';
 import { MediaLibraryPanel, initialMediaAssets } from './components/MediaLibraryPanel';
 import { CaptionsPanel } from './components/CaptionsPanel';
@@ -66,8 +68,8 @@ const INITIAL_TRACKS: Track[] = [
   },
   {
     id: 'track_image_1',
-    name: 'AUDIO 02 (Immagini)',
-    type: 'audio',
+    name: 'IMMAGINI',
+    type: 'image',
     isSolo: false,
     isMuted: false,
     headerBg: '#0d3324',
@@ -98,7 +100,7 @@ export default function App() {
   const [subtitles, setSubtitles] = useState<SubtitleItem[]>(INITIAL_SUBTITLES);
 
   // Tabs & Toolbars
-  const [activeTab, setActiveTab] = useState<string>('Effects');
+  const [activeTab, setActiveTab] = useState<string>('');
   const [isMicActive, setIsMicActive] = useState<boolean>(false);
 
   // Claude DT MCP Integration State
@@ -134,6 +136,7 @@ export default function App() {
   const talFileInputRef = useRef<HTMLInputElement>(null);
   // Hidden file input ref for importing media (.mp4, .mov, .avi, .mp3, .wav, .png, .jpg) into stage
   const mediaFileInputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   // Clipboard & 10-step Undo History (Request #1)
   const [clipboardClip, setClipboardClip] = useState<TimelineClip[] | null>(null);
@@ -142,7 +145,9 @@ export default function App() {
     clipsRef.current = clips;
   }, [clips]);
 
-  const historyRef = useRef<TimelineClip[][]>([INITIAL_CLIPS]);
+  const tracksRef = useRef<Track[]>(tracks);
+  useEffect(() => { tracksRef.current=tracks; },[tracks]);
+  const historyRef = useRef<{clips:TimelineClip[];tracks:Track[]}[]>([{clips:INITIAL_CLIPS,tracks:INITIAL_TRACKS}]);
   const historyIndexRef = useRef<number>(0);
   const [historyCount, setHistoryCount] = useState<number>(0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -158,17 +163,18 @@ export default function App() {
   ]);
 
   // Push new move to history (maintains up to 10 moves)
-  const pushHistory = useCallback((newClips: TimelineClip[]) => {
+  const pushHistory = useCallback((newClips: TimelineClip[], newTracks=tracksRef.current) => {
+    const snapshot={clips:newClips,tracks:newTracks};
     const currentIdx = historyIndexRef.current;
     const sliced = historyRef.current.slice(0, currentIdx + 1);
 
     // Skip duplicate states
     const last = sliced[sliced.length - 1];
-    if (last && JSON.stringify(last) === JSON.stringify(newClips)) {
+    if (last && JSON.stringify(last) === JSON.stringify(snapshot)) {
       return;
     }
 
-    let next = [...sliced, newClips];
+    let next = [...sliced, snapshot];
     // Keep up to 10 moves backward (11 snapshots total)
     if (next.length > 11) {
       next = next.slice(next.length - 11);
@@ -182,7 +188,7 @@ export default function App() {
 
   const sharedState = { clips, tracks, subtitles, mediaAssets, currentTime, selectedClipId, aspectRatio };
   useEditorSync(sharedState, remote => {
-    setClips(remote.clips); clipsRef.current = remote.clips; pushHistory(remote.clips);
+    setClips(remote.clips); clipsRef.current = remote.clips; pushHistory(remote.clips,remote.tracks);
     setTracks(remote.tracks); setSubtitles(remote.subtitles); setMediaAssets(remote.mediaAssets);
     setCurrentTime(remote.currentTime); setSelectedClipId(remote.selectedClipId);
     setSelectedClipIds(remote.selectedClipId ? [remote.selectedClipId] : []);
@@ -196,8 +202,12 @@ export default function App() {
       const prevIdx = historyIndexRef.current - 1;
       historyIndexRef.current = prevIdx;
       setHistoryCount(prevIdx);
-      const targetClips = historyRef.current[prevIdx];
+      const snapshot = historyRef.current[prevIdx];
+      const targetClips = snapshot?.clips;
       if (targetClips) {
+        setTracks(snapshot.tracks);tracksRef.current=snapshot.tracks;
+        setSelectedClipId(id=>targetClips.some(c=>c.id===id)?id:null);
+        setSelectedClipIds(ids=>ids.filter(id=>targetClips.some(c=>c.id===id)));
         setClips(targetClips);
         clipsRef.current = targetClips;
         setToastMessage(`↩ Annulla (Ctrl+Z): tornato indietro di 1 mossa (${prevIdx}/10 mosse disponibili)`);
@@ -215,8 +225,12 @@ export default function App() {
       const nextIdx = historyIndexRef.current + 1;
       historyIndexRef.current = nextIdx;
       setHistoryCount(nextIdx);
-      const targetClips = historyRef.current[nextIdx];
+      const snapshot = historyRef.current[nextIdx];
+      const targetClips = snapshot?.clips;
       if (targetClips) {
+        setTracks(snapshot.tracks);tracksRef.current=snapshot.tracks;
+        setSelectedClipId(id=>targetClips.some(c=>c.id===id)?id:null);
+        setSelectedClipIds(ids=>ids.filter(id=>targetClips.some(c=>c.id===id)));
         setClips(targetClips);
         clipsRef.current = targetClips;
         setToastMessage(`↪ Ripristina (Ctrl+Y): avanti di 1 mossa`);
@@ -353,7 +367,7 @@ export default function App() {
         if (data.tracks) setTracks(data.tracks);
         if (data.clips) {
           setClips(data.clips);
-          pushHistory(data.clips);
+          pushHistory(data.clips,data.tracks || tracksRef.current);
         }
         if (data.markers) setMarkers(data.markers);
         if (data.subtitles) setSubtitles(data.subtitles);
@@ -384,13 +398,12 @@ export default function App() {
 
   // Delete Track and its clips
   const handleDeleteTrack = (trackId: string) => {
-    setTracks(prev => prev.filter(t => t.id !== trackId));
-    setClips(prev => {
-      const next = prev.filter(c => c.trackId !== trackId);
-      pushHistory(next);
-      return next;
-    });
+    const nextTracks=tracks.filter(t=>t.id!==trackId);
+    const removed=new Set(clips.filter(c=>c.trackId===trackId).map(c=>c.id));
+    const nextClips=clips.filter(c=>!removed.has(c.id)).map(c=>removed.has(c.linkedClipId || '')?{...c,linkedClipId:undefined,isLinked:false}:c);
+    setTracks(nextTracks);tracksRef.current=nextTracks;setClips(nextClips);clipsRef.current=nextClips;pushHistory(nextClips,nextTracks);
   };
+
 
 
   // Helper: verifica restrizioni rigide su quale traccia può ospitare ciascun tipo di media
@@ -402,7 +415,7 @@ export default function App() {
     if (mediaType === 'effect') return trackType === 'effect';
     if (mediaType === 'video') return trackType === 'video';
     if (mediaType === 'audio') return trackType === 'audio';
-    if (mediaType === 'image') return trackType === 'audio';
+    if (mediaType === 'image') return ['image','video','audio'].includes(trackType);
     return false;
   };
 
@@ -410,7 +423,7 @@ export default function App() {
   const addAsset = (asset: MediaAsset, trackId: string, time: number, preparedTracks = tracks) => {
     try {
       const next = applyTimelineTool({ ...sharedState, tracks: preparedTracks }, 'add_clip', { assetId: asset.id, trackId, timeSeconds: Math.max(0, time) });
-      setTracks(next.tracks); setClips(next.clips); pushHistory(next.clips);
+      setTracks(next.tracks); setClips(next.clips); pushHistory(next.clips,next.tracks);
       setSelectedClipId(next.selectedClipId); setSelectedClipIds(next.selectedClipId ? [next.selectedClipId] : []);
     } catch (error) { setTrackConstraintWarning((error as Error).message); }
   };
@@ -540,13 +553,14 @@ export default function App() {
 
       if (result.updatedClips) {
         setClips(result.updatedClips);
-        pushHistory(result.updatedClips);
+        pushHistory(result.updatedClips,result.updatedTracks || tracks);
       }
+      if (result.updatedTracks) { setTracks(result.updatedTracks);tracksRef.current=result.updatedTracks; }
       if (result.updatedTime !== undefined) {
         setCurrentTime(result.updatedTime);
       }
-      if (result.selectedClipId) {
-        setSelectedClipId(result.selectedClipId);
+      if (result.selectedClipId !== undefined) {
+        setSelectedClipId(result.selectedClipId);setSelectedClipIds(result.selectedClipId?[result.selectedClipId]:[]);
       }
       if (result.updatedSubtitles) {
         setSubtitles(result.updatedSubtitles);
@@ -711,6 +725,10 @@ export default function App() {
   const handleUpdateClip = (clipId: string, updates: Partial<TimelineClip>) => {
     setClips(prev => {
       const target = prev.find(c => c.id === clipId);
+      if (target && updates.duration !== undefined && ['video','audio'].includes(target.type)) {
+        const asset=mediaAssets.find(a=>a.id===target.assetId);
+        if(asset)updates={...updates,duration:Math.max(.04,Math.min(updates.duration,asset.durationSec-(updates.offset ?? target.offset ?? 0)))};
+      }
       const linkedUpdates = Object.fromEntries(Object.entries(updates).filter(([key]) => ['startTime', 'duration', 'offset'].includes(key)));
       const next = prev.map(c => c.id === clipId ? { ...c, ...updates } : target?.isLinked && target.linkedClipId === c.id ? { ...c, ...linkedUpdates } : c);
       clipsRef.current = next;
@@ -726,20 +744,17 @@ export default function App() {
 
   // Toggle Solo / Mute on Tracks
   const handleToggleTrackSolo = (trackId: string) => {
-    setTracks(prev =>
-      prev.map(t => (t.id === trackId ? { ...t, isSolo: !t.isSolo } : t))
-    );
+    const next=tracks.map(t=>t.id===trackId?{...t,isSolo:!t.isSolo}:t);
+    setTracks(next);tracksRef.current=next;pushHistory(clips,next);
   };
-
   const handleToggleTrackMute = (trackId: string) => {
-    setTracks(prev =>
-      prev.map(t => (t.id === trackId ? { ...t, isMuted: !t.isMuted } : t))
-    );
+    const next=tracks.map(t=>t.id===trackId?{...t,isMuted:!t.isMuted}:t);
+    setTracks(next);tracksRef.current=next;pushHistory(clips,next);
   };
 
   // Add media asset from stage library into timeline at exact vertical playhead position (doppio click)
   const handleAddMediaToTimeline = (asset: MediaAsset) => {
-    const type = asset.type === 'image' ? 'audio' : asset.type;
+    const type = asset.type;
     let availableTracks = tracks;
     let track = tracks.find(t => t.type === type);
     if (!track) {
@@ -783,7 +798,7 @@ export default function App() {
       laneBg,
     };
 
-    setTracks(prev => [...prev, newTrack]);
+    const next=[...tracks,newTrack];setTracks(next);tracksRef.current=next;pushHistory(clips,next);
   };
 
   // Markers Handlers
@@ -836,12 +851,13 @@ export default function App() {
   };
 
   const handleToggleMic = () => {
+    if (recognitionRef.current) { recognitionRef.current.stop(); setIsMicActive(false); return; }
     const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!Recognition) { setTrackConstraintWarning('Riconoscimento vocale non disponibile in questo browser. Usa la console comandi.'); return; }
-    const recognition = new Recognition(); recognition.lang = 'it-IT';
+    const recognition = new Recognition(); recognitionRef.current=recognition; recognition.lang = 'it-IT';
     recognition.onresult = (event: any) => handleSendPrompt(event.results[0][0].transcript);
-    recognition.onend = () => setIsMicActive(false);
-    recognition.onerror = () => { setIsMicActive(false); setTrackConstraintWarning('Microfono non disponibile o accesso negato.'); };
+    recognition.onend = () => { recognitionRef.current=null; setIsMicActive(false); };
+    recognition.onerror = () => { recognitionRef.current=null; setIsMicActive(false); setTrackConstraintWarning('Microfono non disponibile o accesso negato.'); };
     recognition.start(); setIsMicActive(true);
   };
 
@@ -870,12 +886,16 @@ export default function App() {
 
       {/* 1. Top Navigation Bar */}
       <TopNav
+        hasSelection={clips.some(c=>c.id===selectedClipId || selectedClipIds.includes(c.id))}
+        canUndo={historyCount>0}
+        canRedo={historyIndexRef.current<historyRef.current.length-1}
+        canPaste={Boolean(clipboardClip?.length)}
         claudeConnected={claudeConnected}
         onToggleClaude={handleToggleClaude}
         onOpenClaudeDialog={() => { setMcpProvider('claude'); handleOpenClaudeDialog(); }}
         onOpenChatGPT={() => { setMcpProvider('chatgpt'); setIsClaudeDialogOpen(true); }}
         onCut={handleCutClip}
-        onDelete={handleDeleteClip}
+        onDelete={() => handleDeleteClip()}
         onUndo={handleUndo}
         onRedo={handleRedo}
         onCopy={handleCopyClip}
@@ -887,10 +907,17 @@ export default function App() {
         onAddMarker={() => handleAddMarker(currentTime)}
         markerCount={markers.length}
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={tab => setActiveTab(prev => prev===tab ? '' : tab)}
+        onFullscreen={() => { const action = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); action.catch(() => setTrackConstraintWarning('Schermo intero non disponibile in questa finestra.')); }}
         isMicActive={isMicActive}
         onToggleMic={handleToggleMic}
       />
+
+      {activeTab && <EditingToolsPanel tab={activeTab} selected={selectedClip} onClose={() => setActiveTab('')}
+        onUpdate={updates => { if (!selectedClipId) return; const next=clips.map(c=>c.id===selectedClipId?{...c,...updates}:c);setClips(next);clipsRef.current=next;pushHistory(next); }}
+        onCrossDissolve={duration => { try { const next=applyCrossDissolve(clips,selectedClipId || '',duration);setClips(next);clipsRef.current=next;pushHistory(next); } catch(error) {setTrackConstraintWarning((error as Error).message);} }}>
+        <CaptionsPanel spokenLanguage={spokenLanguage} setSpokenLanguage={setSpokenLanguage} bilingualCaptions={bilingualCaptions} setBilingualCaptions={setBilingualCaptions} deleteCurrentCaptions={deleteCurrentCaptions} setDeleteCurrentCaptions={setDeleteCurrentCaptions} subtitles={subtitles} onGenerateCaptions={handleGenerateCaptions} onUpdateSubtitle={handleUpdateSubtitle} onDeleteSubtitle={handleDeleteSubtitle}/>
+      </EditingToolsPanel>}
 
       {/* 2. Main Middle Workspace: Header + 4 Resizable Panels */}
       <div className="flex-1 flex flex-col min-h-0 bg-[#0e121d]">
@@ -932,34 +959,6 @@ export default function App() {
             onMouseDown={e => {
               e.preventDefault();
               setResizingDivider({ type: 'media', startX: e.clientX, startY: e.clientY, startDim: mediaWidth });
-            }}
-            className="w-1.5 hover:w-2 bg-[#172133] hover:bg-cyan-500 cursor-col-resize transition-all z-20 flex items-center justify-center group shrink-0 select-none"
-            title="Trascina per allargare o stringere la sezione"
-          >
-            <div className="w-0.5 h-8 bg-gray-600 group-hover:bg-black rounded" />
-          </div>
-
-          {/* Panel 2: Spoken Language / Captions */}
-          <div style={{ width: `${captionsWidth}px` }} className="h-full shrink-0">
-            <CaptionsPanel
-              spokenLanguage={spokenLanguage}
-              setSpokenLanguage={setSpokenLanguage}
-              bilingualCaptions={bilingualCaptions}
-              setBilingualCaptions={setBilingualCaptions}
-              deleteCurrentCaptions={deleteCurrentCaptions}
-              setDeleteCurrentCaptions={setDeleteCurrentCaptions}
-              subtitles={subtitles}
-              onGenerateCaptions={handleGenerateCaptions}
-              onUpdateSubtitle={handleUpdateSubtitle}
-              onDeleteSubtitle={handleDeleteSubtitle}
-            />
-          </div>
-
-          {/* Draggable Divider 2 (Captions / Player) */}
-          <div
-            onMouseDown={e => {
-              e.preventDefault();
-              setResizingDivider({ type: 'captions', startX: e.clientX, startY: e.clientY, startDim: captionsWidth });
             }}
             className="w-1.5 hover:w-2 bg-[#172133] hover:bg-cyan-500 cursor-col-resize transition-all z-20 flex items-center justify-center group shrink-0 select-none"
             title="Trascina per allargare o stringere la sezione"

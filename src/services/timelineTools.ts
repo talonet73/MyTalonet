@@ -29,7 +29,7 @@ export function applyTimelineTool(state: TimelineState, name: string, args: Reco
   if (name === 'add_clip') {
     const asset = state.mediaAssets.find(a => a.id === args.assetId);
     const track = state.tracks.find(t => t.id === args.trackId);
-    if (!asset?.fileUrl || !track || !(track.type === asset.type || (asset.type === 'image' && track.type === 'audio'))) throw new Error('Media o traccia non valida.');
+    if (!asset?.fileUrl || !track || !(track.type === asset.type || (asset.type === 'image' && ['video','image','audio'].includes(track.type)))) throw new Error('Media o traccia non valida.');
     const id = uid(), startTime = numeric(args.timeSeconds, 0);
     const clip: TimelineClip = { id, assetId: asset.id, trackId: track.id, name: asset.name, type: asset.type, mediaUrl: asset.fileUrl, mediaThumbnail: asset.thumbnailUrl, startTime, duration: asset.durationSec, offset: 0, transparency: 100, volumeDb: 0, fadeIn: 0, fadeOut: 0, color: asset.type === 'video' ? '#2563eb' : asset.type === 'audio' ? '#10b981' : '#eab308' };
     const audioTrack = state.tracks.find(t => t.type === 'audio');
@@ -44,7 +44,7 @@ export function applyTimelineTool(state: TimelineState, name: string, args: Reco
   if (!timelineTools.some(t => t.name === name)) throw new Error(`Strumento sconosciuto: ${name}`);
   const target = state.clips.find(c => c.id === (args.clipId || state.selectedClipId));
   if (!target) throw new Error('Seleziona una clip o specifica clipId.');
-  const linked = state.clips.find(c => c.id === target.linkedClipId && c.linkedClipId === target.id);
+  const linked = target.isLinked === false ? undefined : state.clips.find(c => c.id === target.linkedClipId && c.linkedClipId === target.id && c.isLinked !== false);
   if (name === 'delete_clip') return { ...state, clips: state.clips.filter(c => c.id !== target.id && c.id !== linked?.id), selectedClipId: null };
   if (name === 'cut_clip_at_time') {
     const time = numeric(args.timeSeconds, 0);
