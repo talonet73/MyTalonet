@@ -4,7 +4,7 @@ export const allowedOnTrack = (mediaType:TrackType, trackType:TrackType) => medi
 // Repair old projects which stored images on audio or video lanes.
 export function normalizeTrackAssignments(clips:TimelineClip[], tracks:Track[]) {
   const nextTracks=[...tracks];
-  const labels={image:'IMMAGINI',video:'VIDEO',audio:'AUDIO',effect:'EFFECTS'};
+  const labels={image:'IMMAGINI',video:'VIDEO',audio:'AUDIO',effect:'EFFECTS',text:'TESTO'};
   const nextClips=clips.map(clip=>{
     if(nextTracks.some(t=>t.id===clip.trackId && t.type===clip.type))return clip;
     let track=nextTracks.find(t=>t.type===clip.type);

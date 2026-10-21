@@ -1,12 +1,12 @@
 import { test,expect,type Page } from '@playwright/test';
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
-const tracks=[{id:'v',name:'VIDEO',type:'video',headerBg:'#0f2942',laneBg:'#111d2e'},{id:'a',name:'AUDIO',type:'audio',headerBg:'#0d3324',laneBg:'#10251e'},{id:'i',name:'IMMAGINI',type:'image',headerBg:'#382a08',laneBg:'#1a1608'},{id:'fx',name:'EFFECTS',type:'effect',headerBg:'#35121b',laneBg:'#1e141a'}].map(t=>({...t,isMuted:false,isSolo:false}));
+const tracks=[{id:'t',name:'TESTO',type:'text',headerBg:'#63300d',laneBg:'#301909'},{id:'v',name:'VIDEO',type:'video',headerBg:'#0f2942',laneBg:'#111d2e'},{id:'a',name:'AUDIO',type:'audio',headerBg:'#0d3324',laneBg:'#10251e'},{id:'i',name:'IMMAGINI',type:'image',headerBg:'#382a08',laneBg:'#1a1608'},{id:'fx',name:'EFFECTS',type:'effect',headerBg:'#35121b',laneBg:'#1e141a'}].map(t=>({...t,isMuted:false,isSolo:false}));
 let pattern:any,red:any,blue:any,voice:any,video:any;
 async function state(page:Page){return (await(await page.request.get('/api/editor/state')).json()).state;}
 async function project(page:Page,clips:any[]=[],subtitles:any[]=[]){
   await page.goto('/');
-  const data={appName:'TALEDIT',tracks,clips,mediaAssets:[pattern,red,blue,voice,video],subtitles,markers:[],currentTime:0,aspectRatio:'16:9'};
+  const data={appName:'TALEDIT',captionWorkflow:'timeline',tracks,clips,mediaAssets:[pattern,red,blue,voice,video],subtitles,markers:[],currentTime:0,aspectRatio:'16:9'};
   await page.locator('input[type=file]').first().setInputFiles({name:'toolbar.tal',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(data))});
   await expect.poll(async()=>JSON.stringify((await state(page)).clips)).toBe(JSON.stringify(clips));
 }
@@ -64,10 +64,12 @@ test('Captions opens its panel, recognizes real speech, edits, translates toggle
   await page.getByRole('button',{name:'Captions',exact:true}).click();const panel=page.getByRole('dialog',{name:'Pannello Captions'});await expect(panel).toBeVisible();
   await panel.getByLabel('Lingua parlata').selectOption('English');await panel.getByRole('button',{name:'Traduzione in inglese'}).click();await expect(panel.getByRole('button',{name:'Traduzione in inglese'})).toHaveAttribute('aria-pressed','true');
   await panel.getByRole('button',{name:'Traduzione in inglese'}).click();await panel.getByLabel('Delete current captions').check();
-  await panel.getByRole('button',{name:'GENERATE',exact:true}).click();await expect(panel.getByLabel('Testo sottotitolo').first()).toBeVisible({timeout:90000});
+  await panel.getByRole('button',{name:'Trascrivi audio',exact:true}).click();await expect(panel.getByLabel('Testo sottotitolo').first()).toBeVisible({timeout:90000});
   await expect.poll(async()=>(await state(page)).subtitles.map((s:any)=>s.text).join(' ').toLowerCase()).toContain('country');
   await panel.getByLabel('Testo sottotitolo').first().fill('Testo corretto');await expect.poll(async()=>(await state(page)).subtitles[0].text).toBe('Testo corretto');
+  await panel.getByRole('button',{name:'GENERATE',exact:true}).click();await expect.poll(async()=>(await state(page)).clips.filter((c:any)=>c.type==='text')[0]?.text).toBe('Testo corretto');
   const count=(await state(page)).subtitles.length;await panel.getByTitle('Elimina riga').first().click();await expect.poll(async()=>(await state(page)).subtitles.length).toBe(count-1);
+  await panel.getByRole('button',{name:'GENERATE',exact:true}).click();await expect.poll(async()=>(await state(page)).clips.filter((c:any)=>c.type==='text').length).toBe(count-1);
   await panel.getByRole('button',{name:'Chiudi pannello'}).click();
 });
 test('toolbar edit buttons and File menus perform their actions',async({page})=>{
@@ -101,13 +103,13 @@ test('track controls, zoom and marker dialogs persist changes',async({page})=>{
   const solo=page.getByTitle('Solo pista').first();await solo.click();await expect.poll(async()=>(await state(page)).tracks[0].isSolo).toBe(true);await solo.click();
   const mute=page.getByTitle('Muto pista').first();await mute.click();await expect.poll(async()=>(await state(page)).tracks[0].isMuted).toBe(true);await mute.click();
   const before=await page.locator('[data-clip-id=c]').evaluate(e=>e.getBoundingClientRect().width);await page.getByTitle('Ingrandisci timeline').click();await expect.poll(async()=>page.locator('[data-clip-id=c]').evaluate(e=>e.getBoundingClientRect().width)).toBeGreaterThan(before);await page.getByTitle('Rimpicciolisci timeline').click();
-  for(const type of ['Video (Blu)','Audio (Verde)','Effetti (Rosso)','Immagini (Giallo)']){
+  for(const type of ['Video (Blu)','Audio (Verde)','Effetti (Rosso)','Immagini (Giallo)','Testo (Arancione)']){
     await page.getByTitle('Aggiungi una nuova traccia audio, video, effetto o immagine').click();const modal=page.getByRole('dialog',{name:'Nuova traccia'});await modal.getByRole('button',{name:type,exact:false}).click();await modal.getByRole('button',{name:'Aggiungi Pista',exact:true}).click();
   }
-  await expect.poll(async()=>(await state(page)).tracks.length).toBe(8);
+  await expect.poll(async()=>(await state(page)).tracks.length).toBe(10);
   await page.getByRole('button',{name:'+ Nuova Pista',exact:true}).click();await page.getByRole('button',{name:'Annulla',exact:true}).click();
   await page.getByTitle('Aggiungi una nuova traccia audio, video, effetto o immagine').click();await page.getByLabel('Chiudi nuova traccia').click();
-  await page.getByTitle(/Elimina traccia/).last().click();await expect.poll(async()=>(await state(page)).tracks.length).toBe(7);
+  await page.getByTitle(/Elimina traccia/).last().click();await expect.poll(async()=>(await state(page)).tracks.length).toBe(9);
   await page.getByRole('button',{name:'Marker',exact:true}).click();await page.locator('[title^="Marker 1:"]').click();const marker=page.getByRole('dialog',{name:'Dettagli marker'});await marker.locator('input[type=text]').fill('Nota verificata');await marker.locator('textarea').fill('Cambio scena');for(const color of ['#f59e0b','#ef4444','#10b981','#3b82f6','#8b5cf6'])await marker.getByLabel(`Colore ${color}`,{exact:true}).click();await marker.getByRole('button',{name:'Salva Modifiche'}).click();await page.locator('[title^="Nota verificata:"]').click();await page.getByRole('button',{name:'Chiudi',exact:true}).click();
   await page.locator('[title^="Nota verificata:"]').click();await page.getByRole('dialog',{name:'Dettagli marker'}).getByRole('button',{name:'Elimina',exact:true}).click();await expect(page.locator('[title^="Nota verificata:"]')).toHaveCount(0);
   await page.getByTitle('Aggiungi Marker al tempo corrente',{exact:true}).click();await page.locator('[title^="Marker 1:"]').click();await page.getByLabel('Chiudi marker').click();
@@ -143,12 +145,12 @@ test('trim handles update source offset and linked audio; track delete can be un
 });
 test('export format/resolution/weight controls, JSON, repeat export and download work',async({page})=>{
   await project(page,[clip(red,'img',{duration:1}),clip(voice,'sound',{duration:1})]);await page.getByRole('button',{name:'Esporta',exact:true}).click();const modal=page.getByRole('dialog',{name:'Esportazione'});
-  for(const fmt of ['mp4','avi','mov','mp3','wav']){await modal.getByRole('button',{name:new RegExp('^\\.'+fmt,'i')}).click();await expect(modal.getByRole('button',{name:new RegExp('^\\.'+fmt,'i')})).toHaveClass(/ring-1/);}
+  for(const fmt of ['mp4','avi','mov','mp3','wav']){await modal.getByRole('group',{name:'Tipo di esportazione'}).getByRole('button',{name:['mp3','wav'].includes(fmt)?'Audio':'Video',exact:true}).click();await modal.getByRole('button',{name:new RegExp('^\\.'+fmt,'i')}).click();await expect(modal.getByRole('button',{name:new RegExp('^\\.'+fmt,'i')})).toHaveClass(/ring-1/);}
   await expect(modal.getByRole('slider',{name:'Peso del file'})).toBeDisabled();
-  await modal.getByRole('button',{name:/^\.mp4/i}).click();for(const res of ['4K Ultra HD','1080p Full HD','720p HD'])await modal.getByRole('button',{name:new RegExp(res)}).click();await slider(page,'Peso del file',80);
+  await modal.getByRole('group',{name:'Tipo di esportazione'}).getByRole('button',{name:'Video',exact:true}).click();await modal.getByRole('button',{name:/^\.mp4/i}).click();for(const res of ['4K Ultra HD','1080p Full HD','720p HD'])await modal.getByRole('button',{name:new RegExp(res)}).click();await slider(page,'Peso del file',80);
   const saved=page.waitForEvent('download');await modal.getByRole('button',{name:'Salva Progetto TALEDIT (.json)',exact:true}).click();await(await saved).saveAs('/tmp/toolbar-export-project.json');expect(JSON.parse(fs.readFileSync('/tmp/toolbar-export-project.json','utf8')).clips).toHaveLength(2);
   await modal.getByRole('button',{name:/Avvia Rendering/}).click();await expect(modal.getByText('Rendering completato con successo!')).toBeVisible({timeout:30000});await modal.getByRole('button',{name:'Esegui un’altra esportazione',exact:true}).count().then(async count=>{if(count)await modal.getByRole('button',{name:'Esegui un’altra esportazione',exact:true}).click();else await modal.getByRole('button',{name:"Esegui un'altra esportazione",exact:true}).click();});
-  await modal.getByRole('button',{name:/^\.mp3/i}).click();await modal.getByRole('button',{name:/Avvia Rendering/}).click();await expect(modal.getByText('Rendering completato con successo!')).toBeVisible({timeout:30000});const exported=page.waitForEvent('download');await modal.getByRole('button',{name:/^Scarica TALEDIT/}).click();const audio='/tmp/toolbar-ui-audio.mp3';await(await exported).saveAs(audio);const probe=JSON.parse(execFileSync('ffprobe',['-v','error','-show_streams','-of','json',audio],{encoding:'utf8'}));expect(probe.streams[0].codec_name).toBe('mp3');
+  await modal.getByRole('group',{name:'Tipo di esportazione'}).getByRole('button',{name:'Audio',exact:true}).click();await modal.getByRole('button',{name:/^\.mp3/i}).click();await modal.getByRole('button',{name:/Avvia Rendering/}).click();await expect(modal.getByText('Rendering completato con successo!')).toBeVisible({timeout:30000});const exported=page.waitForEvent('download');await modal.getByRole('button',{name:/^Scarica TALEDIT/}).click();const audio='/tmp/toolbar-ui-audio.mp3';await(await exported).saveAs(audio);const probe=JSON.parse(execFileSync('ffprobe',['-v','error','-show_streams','-of','json',audio],{encoding:'utf8'}));expect(probe.streams[0].codec_name).toBe('mp3');
   await page.getByRole('button',{name:'Esporta',exact:true}).click();await expect(page.getByRole('button',{name:/Avvia Rendering/})).toBeVisible();await page.getByLabel('Chiudi esportazione').click();
 });
 test('stage filters and timeline context linking/unlinking/delete buttons are consistent',async({page})=>{
@@ -209,4 +211,40 @@ test('BG Remover replaces trimmed video while linked source audio stays synchron
   const processed=(await state(page)).clips.find((c:any)=>c.id==='bg-video'),audio=(await state(page)).clips.find((c:any)=>c.id==='bg-audio');expect(processed.mediaUrl).toMatch(/bg_.*\.webm$/);expect(processed.offset).toBe(0);expect(audio.offset).toBe(.4);expect(audio.mediaUrl).toBe(asset.fileUrl);
   const block=page.locator('[data-clip-id=bg-video]');await block.hover();const edge=block.getByTitle("Trascina per accorciare o allungare dall'inizio",{exact:true});const box=(await edge.boundingBox())!;await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+box.width/2+24,box.y+box.height/2,{steps:5});await page.mouse.up();
   await expect.poll(async()=>(await state(page)).clips.find((c:any)=>c.id==='bg-video').offset).toBe(1);await expect.poll(async()=>(await state(page)).clips.find((c:any)=>c.id==='bg-audio').offset).toBeCloseTo(1.4);
+});
+
+test('all application windows move by their title bar',async({page})=>{
+  await project(page,[clip(red)]);
+  async function move(name:string){const dialog=page.getByRole('dialog',{name,exact:true});const win=await dialog.getAttribute('data-draggable-window')!==null?dialog:dialog.locator('[data-draggable-window]').first();const header=win.locator('[data-window-handle]').first();const before=(await win.boundingBox())!,bar=(await header.boundingBox())!;await page.mouse.move(bar.x+bar.width*.3,bar.y+bar.height/2);await page.mouse.down();await page.mouse.move(bar.x+bar.width*.3-60,bar.y+bar.height/2+30,{steps:5});await page.mouse.up();await expect.poll(async()=>Math.round((await win.boundingBox())!.x-before.x)).toBe(-60);await expect.poll(async()=>Math.round((await win.boundingBox())!.y-before.y)).toBe(30);}
+  for(const name of ['Effects','Transitions','Captions','Adjustment']){await page.getByRole('button',{name,exact:true}).click();await move(`Pannello ${name}`);await page.getByLabel('Chiudi pannello',{exact:true}).click();}
+  await page.getByRole('button',{name:'BG Remover',exact:true}).click();await move('Pannello BG Remover');await page.getByLabel('Chiudi BG Remover').click();
+  await page.getByRole('button',{name:'ChatGPT MCP',exact:true}).click();await move('Collegamento MCP');await page.getByLabel('Chiudi collegamento MCP').click();
+  await page.getByRole('button',{name:'Esporta',exact:true}).click();await move('Esportazione');await page.getByLabel('Chiudi esportazione').click();
+  await page.getByRole('button',{name:'Importa da YouTube',exact:true}).click();await move('Importa da YouTube');await page.getByLabel('Chiudi YouTube').click();
+  await page.getByTitle('Aggiungi una nuova traccia audio, video, effetto o immagine').click();await move('Nuova traccia');await page.getByLabel('Chiudi nuova traccia').click();
+  await page.getByRole('button',{name:'Marker',exact:true}).click();await page.locator('[title^="Marker 1:"]').click();await move('Dettagli marker');await page.getByLabel('Chiudi marker').click();
+});
+test('corrected captions become timed orange text clips, editable and saved in the project',async({page})=>{
+  const drafts=[{id:'line1',text:'Frase da correggere',startTime:.4,endTime:2.4},{id:'line2',text:'Seconda frase',startTime:2.5,endTime:3.5}];
+  await project(page,[clip(video,'movie',{duration:4})],drafts);expect((await state(page)).clips.filter((c:any)=>c.type==='text')).toHaveLength(0);
+  await page.getByRole('button',{name:'Captions',exact:true}).click();const panel=page.getByRole('dialog',{name:'Pannello Captions'});await panel.getByLabel('Testo sottotitolo').first().fill('Frase corretta');await panel.getByRole('button',{name:'GENERATE',exact:true}).click();await expect.poll(async()=>(await state(page)).clips.filter((c:any)=>c.type==='text').length).toBe(2);
+  const text=(await state(page)).clips.find((c:any)=>c.type==='text');expect(text.startTime).toBe(.4);expect(text.duration).toBe(2);expect(text.text).toBe('Frase corretta');expect(text.trackId).toBe('t');await panel.getByRole('button',{name:'Chiudi pannello'}).click();
+  const block=page.locator(`[data-clip-id="${text.id}"]`);await block.click();await page.getByLabel('Testo della clip').fill('Titolo modificato');await expect.poll(async()=>(await state(page)).clips.find((c:any)=>c.id===text.id).text).toBe('Titolo modificato');
+  const box=(await block.boundingBox())!;await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+box.width/2+24,box.y+box.height/2,{steps:5});await page.mouse.up();await expect.poll(async()=>(await state(page)).clips.find((c:any)=>c.id===text.id).startTime).toBe(1.4);
+  const saved=page.waitForEvent('download');await page.getByRole('button',{name:'Salva',exact:true}).click();const file='/tmp/taledit-text-project.tal';await(await saved).saveAs(file);await page.locator('input[type=file]').first().setInputFiles(file);await expect.poll(async()=>(await state(page)).selectedClipId).toBe(null);expect((await state(page)).clips.find((c:any)=>c.id===text.id).text).toBe('Titolo modificato');
+});
+test('player always fits, rows shrink with the timeline and track handles resize real audio waves',async({page})=>{
+  await project(page,[clip(video,'vsize',{duration:3}),clip(voice,'asize',{duration:3})]);await expect(page.getByLabel('Onda audio')).toBeVisible();const points=await page.getByLabel('Onda audio').locator('polygon').getAttribute('points');expect(points!.length).toBeGreaterThan(1000);
+  const lane=page.locator('[data-track-id=a]'),before=(await lane.boundingBox())!.height;
+  const divider=page.getByTitle("Trascina per allargare o stringere l'altezza della timeline",{exact:true});let box=(await divider.boundingBox())!;await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+box.width/2,box.y+box.height/2+100,{steps:5});await page.mouse.up();await expect.poll(async()=>(await lane.boundingBox())!.height).toBeLessThan(before);
+  box=(await divider.boundingBox())!;await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+box.width/2,box.y+box.height/2-250,{steps:5});await page.mouse.up();
+  for(const ratio of ['9:16','1:1','4:3','16:9']){await page.locator('select').filter({has:page.locator('option[value="16:9"]')}).selectOption(ratio);await expect.poll(async()=>{const area=(await page.getByTestId('player-screen').boundingBox())!,frame=(await page.getByTestId('player-frame').boundingBox())!;return frame.y>=area.y && frame.y+frame.height<=area.y+area.height+1 && frame.x>=area.x && frame.x+frame.width<=area.x+area.width+1;}).toBe(true);}
+  const height=(await lane.boundingBox())!.height,handle=page.locator('[data-track-resize=a]');box=(await handle.boundingBox())!;await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+box.width/2,box.y+box.height/2+55,{steps:5});await page.mouse.up();await expect.poll(async()=>(await lane.boundingBox())!.height).toBeGreaterThan(height+40);expect(Math.abs((await lane.boundingBox())!.height-(await page.locator('[data-track-header=a]').boundingBox())!.height)).toBeLessThan(1);
+});
+test('export categories gate images, expose common formats and Screenshot downloads the cursor frame',async({page})=>{
+  await project(page,[clip(video,'snap',{duration:3})]);await page.getByRole('button',{name:'Esporta',exact:true}).click();let modal=page.getByRole('dialog',{name:'Esportazione'}),group=modal.getByRole('group',{name:'Tipo di esportazione'});await expect(group.getByRole('button',{name:'Immagine',exact:true})).toBeDisabled();
+  for(const [category,formats] of [['Video',['mp4','mov','avi','mkv','webm','m4v']],['Audio',['mp3','wav','m4a','aac','flac','ogg','opus','aiff']]] as const){await group.getByRole('button',{name:category,exact:true}).click();for(const format of formats)await expect(modal.getByRole('button',{name:new RegExp('^\\.'+format+'\\b','i')})).toBeVisible();}await page.getByLabel('Chiudi esportazione').click();
+  await page.request.post('/api/editor/connection',{data:{enabled:true}});await page.request.post('/api/mcp',{headers:{Accept:'application/json, text/event-stream'},data:{jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'seek_time',arguments:{timeSeconds:1}}}});await expect.poll(async()=>(await state(page)).currentTime).toBe(1);
+  const download=page.waitForEvent('download');await page.getByRole('button',{name:'Screenshot',exact:true}).click();const file='/tmp/taledit-screenshot.png';await(await download).saveAs(file);const info=JSON.parse(execFileSync('ffprobe',['-v','error','-show_streams','-of','json',file],{encoding:'utf8'}));expect(info.streams[0].codec_name).toBe('png');expect(info.streams[0].width).toBe(1920);expect(info.streams).toHaveLength(1);
+  await project(page,[clip(red)]);await page.getByRole('button',{name:'Esporta',exact:true}).click();modal=page.getByRole('dialog',{name:'Esportazione'});group=modal.getByRole('group',{name:'Tipo di esportazione'});await group.getByRole('button',{name:'Immagine',exact:true}).click();for(const format of ['png','jpg','webp','bmp','tiff','gif'])await expect(modal.getByRole('button',{name:new RegExp('^\\.'+format+'\\b','i')})).toBeVisible();await modal.getByRole('button',{name:/^\.png/i}).click();await modal.getByRole('button',{name:'720p HD',exact:false}).click();await modal.getByRole('button',{name:/Avvia Rendering/}).click();await expect(modal.getByText('Rendering completato con successo!')).toBeVisible();
 });

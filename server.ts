@@ -10,6 +10,7 @@ import { installMcp } from './server/mcp';
 import { installCaptions } from './server/captions';
 import { jobs, startYoutubeDownload } from './server/youtube';
 import {installBackgroundRemover} from './server/background';
+import {installWaveform} from './server/waveform';
 
 export async function createApp(production = process.env.NODE_ENV === 'production') {
   const app = express();
@@ -41,11 +42,12 @@ export async function createApp(production = process.env.NODE_ENV === 'productio
   installMcp(app);
   installCaptions(app);
   installBackgroundRemover(app);
+  installWaveform(app);
   let exportsRunning = 0;
-  app.post('/api/export', async (req, res, next) => {
+  app.post(['/api/export','/api/screenshot'], async (req, res, next) => {
     if (exportsRunning >= 2) { res.status(429).json({ success: false, error: 'Attendi le esportazioni in corso.' }); return; }
     exportsRunning++;
-    try { res.json(await exportMedia(req.body || {})); } catch (error) { next(error); } finally { exportsRunning--; }
+    try { res.json(await exportMedia(req.path==='/api/screenshot'?{...req.body,format:'png'}:req.body || {},{screenshot:req.path==='/api/screenshot'})); } catch (error) { next(error); } finally { exportsRunning--; }
   });
   app.post('/api/youtube/download', (req, res, next) => {
     try { const job = startYoutubeDownload(req.body?.url); res.status(202).json({ jobId: job.id }); } catch (error) { next(error); }

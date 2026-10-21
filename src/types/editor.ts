@@ -1,5 +1,5 @@
 import type { VisualEffect, Adjustments } from '../services/visualSettings';
-export type TrackType = 'effect' | 'video' | 'audio' | 'image';
+export type TrackType = 'effect' | 'video' | 'audio' | 'image' | 'text';
 
 export interface TimelineMarker {
   id: string;
@@ -28,6 +28,9 @@ export interface TimelineClip {
   intensity?: number; // effect controls: 0..10, default 5
   speed?: number;
   effectSpan?: number; // original animation duration, retained through cuts
+  animationOffset?: number; // internal still-frame animation clock
+  text?: string;
+  captionId?: string;
   adjustments?: Adjustments;
   mediaUrl?: string;
   mediaThumbnail?: string;
@@ -45,6 +48,7 @@ export interface Track {
   isMuted: boolean;
   headerBg: string;
   laneBg: string;
+  height?: number; // preferred row height before fitting the timeline viewport
 }
 
 export interface MediaAsset {
@@ -65,6 +69,10 @@ export interface MediaAsset {
 }
 
 export interface SubtitleItem {
+  row?:number;
+  transparency?:number;
+  fadeIn?:number;
+  fadeOut?:number;
   id: string;
   startTime: number;
   endTime: number;

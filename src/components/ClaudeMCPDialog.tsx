@@ -1,3 +1,4 @@
+import {DraggableWindow} from './DraggableWindow';
 import React, { useState, useEffect } from 'react';
 import {
   Sparkles,
@@ -72,9 +73,9 @@ export const ClaudeMCPDialog: React.FC<ClaudeMCPDialogProps> = ({
 
   return (
     <div role="dialog" aria-label="Collegamento MCP" className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="w-full max-w-2xl bg-[#0f1523] border border-[#2b3952] rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-200">
+      <DraggableWindow className="w-full max-w-2xl bg-[#0f1523] border border-[#2b3952] rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 bg-[#131b2d] border-b border-[#232f46]">
+        <div data-window-handle className="flex items-center justify-between px-4 py-3 bg-[#131b2d] border-b border-[#232f46]">
           <div className="flex items-center gap-2.5">
             <div className={`p-1.5 rounded-lg ${claudeConnected ? 'bg-amber-500/20 text-amber-400' : 'bg-gray-800 text-gray-400'}`}>
               <Sparkles className="w-5 h-5" />
@@ -345,7 +346,7 @@ export const ClaudeMCPDialog: React.FC<ClaudeMCPDialogProps> = ({
             ))}
           </div>
         )}
-      </div>
+      </DraggableWindow>
     </div>
   );
 };

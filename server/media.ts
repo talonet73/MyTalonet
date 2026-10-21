@@ -5,6 +5,9 @@ import path from 'node:path';
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { visualFilters } from './visualFilters';
+import {categoryOf, EXPORT_FORMATS} from '../src/services/exportFormats';
+import {timelineSubtitles} from '../src/services/captionClips';
+import {clipAlpha} from '../src/services/visualSettings';
 import { ADJUSTMENTS, EFFECTS } from '../src/services/visualSettings';
 import type { TimelineClip, Track, SubtitleItem } from '../src/types/editor';
 
@@ -50,13 +53,15 @@ function number(value: unknown, fallback: number, min: number, max: number) {
   if (typeof n !== 'number' || !Number.isFinite(n) || n < min || n > max) throw new InputError('Valore numerico fuori intervallo.');
   return n;
 }
-export async function exportMedia(body: any) {
+export async function exportMedia(body: any, options:{screenshot?:boolean}={}) {
   const { format = 'mp4', resolution = '1080p', aspectRatio = '16:9' } = body;
-  if (!['mp4', 'mov', 'avi', 'mp3', 'wav'].includes(format)) throw new InputError('Formato non supportato.');
+  if (!Object.values(EXPORT_FORMATS).flat().includes(format)) throw new InputError('Formato non supportato.');
   if (!['720p', '1080p', '4K'].includes(resolution) || !['16:9', '9:16', '1:1', '4:3'].includes(aspectRatio)) throw new InputError('Risoluzione o proporzioni non valide.');
+  const still=categoryOf(format)==='image';
+  const frameTime=still?number(body.frameTime,0,0,600):0;
   const duration = number(body.durationSec, 15, 0.04, 600);
   const weight = number(body.weightPercentage, 55, 1, 100);
-  if (!Array.isArray(body.clips) || body.clips.length > 200 || !body.clips.length) throw new InputError('Aggiungi almeno una clip alla timeline (massimo 200).');
+  if (!Array.isArray(body.clips) || body.clips.length > 2200 || body.clips.filter((c:TimelineClip)=>c.type!=='text').length>200 || body.clips.filter((c:TimelineClip)=>c.type==='text').length>2000 || !body.clips.length) throw new InputError('Aggiungi almeno una clip alla timeline (massimo 200 clip multimediali e 2000 testi).');
   if (body.tracks !== undefined && !Array.isArray(body.tracks)) throw new InputError('Tracce non valide.');
   const clips = activeClips(body.clips, body.tracks);
   for (const clip of clips) {
@@ -72,11 +77,14 @@ export async function exportMedia(body: any) {
         number(value,0,key==='sharpness'?0:-100,100);
       }
     }
-    if (!['video', 'audio', 'image', 'effect'].includes(clip.type)) throw new InputError('Tipo di clip non valido.');
+    if (!['video', 'audio', 'image', 'effect','text'].includes(clip.type)) throw new InputError('Tipo di clip non valido.');
   }
-  const audioOnly = ['wav', 'mp3'].includes(format);
-  const media = clips.filter(c => c.type !== 'effect' && c.startTime < duration);
-  if (!media.length) throw new InputError('Nessun media attivo da esportare.');
+  const audioOnly = categoryOf(format)==='audio';
+  if(still && !options.screenshot && !clips.some(c=>c.type==='image' && (!body.tracks?.length || body.tracks.some((t:Track)=>t.id===c.trackId && t.type==='image'))))throw new InputError('Popola e attiva la pista IMMAGINI prima di esportare un’immagine.');
+  if(options.screenshot && !clips.some(c=>c.type==='video' && frameTime>=c.startTime && frameTime<c.startTime+c.duration))throw new InputError('Posiziona il cursore su una clip video per lo Screenshot.');
+  const media = clips.filter(c => ['video','audio','image'].includes(c.type) && c.startTime < duration && (!still || (c.type!=='audio' && (options.screenshot || c.type==='image') && frameTime>=c.startTime && frameTime<c.startTime+c.duration)));
+
+  if (!media.length) throw new InputError(still?'Scegli un fotogramma con un’immagine attiva nella pista IMMAGINI.':'Nessun media attivo da esportare.');
   const resolved = await Promise.all(media.map(async clip => {
     const file = localMediaPath(clip.mediaUrl!);
     let info;
@@ -87,7 +95,7 @@ export async function exportMedia(body: any) {
       if (!clip.linkedClipId) throw new InputError(`Nessuna traccia audio in ${clip.name}`);
     }
     const sourceDuration = Number(info.format.duration);
-    if (clip.type !== 'image' && Number.isFinite(sourceDuration) && clip.offset >= sourceDuration) throw new InputError(`Taglio oltre la durata del media: ${clip.name}`);
+    if (clip.type !== 'image' && Number.isFinite(sourceDuration) && clip.offset+(still?frameTime-clip.startTime:0) >= sourceDuration) throw new InputError(`Taglio oltre la durata del media: ${clip.name}`);
     return { ...clip, file, info };
   }));
   let width = resolution === '4K' ? 3840 : resolution === '720p' ? 1280 : 1920;
@@ -102,25 +110,25 @@ export async function exportMedia(body: any) {
   let input = 0;
   let layer = 'base';
   if (!audioOnly) {
-    args.push('-f', 'lavfi', '-i', `color=c=black:s=${width}x${height}:r=25:d=${duration}`);
-    filters.push('[0:v]setpts=PTS-STARTPTS[base]'); input++;
+    args.push('-f', 'lavfi', '-i', `color=c=black:s=${width}x${height}:r=25:d=${still ? .04:duration}`);
+    filters.push(`[0:v]setpts=PTS-STARTPTS+${frameTime}/TB[base]`); input++;
   }
   const audioTags: string[] = [];
   for (const clip of resolved.sort((a,b)=>a.startTime-b.startTime)) {
     const visual = !audioOnly && (clip.type === 'video' || clip.type === 'image');
     const separateAudio = clip.type === 'video' && (clip.linkedClipId || body.clips.some((c: TimelineClip) => c.type === 'audio' && c.linkedClipId === clip.id));
-    const audible = (clip.type === 'audio' || (clip.type === 'video' && !separateAudio)) && clip.info.streams.some((s: any) => s.codec_type === 'audio');
+    const audible = !still && (clip.type === 'audio' || (clip.type === 'video' && !separateAudio)) && clip.info.streams.some((s: any) => s.codec_type === 'audio');
     if (!visual && !audible) continue;
     const idx = input++;
     if (clip.type === 'image') args.push('-loop', '1', '-framerate', '25');
-    else args.push('-ss', String(clip.offset || 0));
+    else args.push('-ss', String((clip.offset || 0)+(still?frameTime-clip.startTime:0)));
     // FFmpeg's native VP9 decoder discards WebM alpha. libvpx preserves it.
     if(visual && clip.info.streams.some((s:any)=>s.codec_name==='vp9' && String(s.tags?.alpha_mode ?? s.tags?.ALPHA_MODE)==='1'))args.push('-c:v','libvpx-vp9');
-    args.push('-t', String(Math.min(clip.duration, duration - clip.startTime)), '-i', clip.file);
+    args.push('-t', String(still ? .04:Math.min(clip.duration, duration - clip.startTime)), '-i', clip.file);
     if (visual) {
       const v = `v${idx}`, next = `layer${idx}`;
       const alpha = (clip.transparency ?? 100) / 100;
-      filters.push(`[${idx}:v]${visualFilters(clip,width,height)}[${v}]`);
+      filters.push(`[${idx}:v]${visualFilters(still?{...clip,startTime:frameTime,fadeIn:0,fadeOut:0,transparency:clipAlpha(clip,frameTime-clip.startTime)*100,animationOffset:frameTime-clip.startTime}:clip,width,height)}[${v}]`);
       filters.push(`[${layer}][${v}]overlay=eof_action=pass:repeatlast=0:enable='gte(t,${clip.startTime})*lt(t,${clip.startTime + clip.duration})'[${next}]`); layer = next;
     }
     if (audible) {
@@ -146,26 +154,26 @@ export async function exportMedia(body: any) {
       // Evaluate time envelopes on a tiny mask, then scale it. Evaluating the
       // same expression for every output pixel makes ordinary effects needlessly slow.
       const maskInput=input++;
-      args.push('-f','lavfi','-i',`color=c=white:s=16x16:r=25:d=${duration}`);
-      filters.push(`[${maskInput}:v]format=gray,geq=lum='255*max(0,min(1,${weight}))',scale=${width}:${height}[fxmask${i}]`);
+      args.push('-f','lavfi','-i',`color=c=white:s=16x16:r=25:d=${still ? .04:duration}`);
+      filters.push(`[${maskInput}:v]setpts=PTS+${frameTime}/TB,format=gray,geq=lum='255*max(0,min(1,${weight}))',scale=${width}:${height}[fxmask${i}]`);
       filters.push(`[${work}]${chain},format=rgb24[${processed}]`);
       filters.push(`[${processed}][fxmask${i}]alphamerge[fxalpha${i}]`);
       filters.push(`[${original}][fxalpha${i}]overlay=eof_action=pass:repeatlast=0:enable='gte(t,${effect.startTime})*lt(t,${effect.startTime+effect.duration})'[${next}]`);layer=next;
     }
   }
-  if (audioTags.length) {
+  if (!still && audioTags.length) {
     filters.push(`${audioTags.join('')}amix=inputs=${audioTags.length}:normalize=0:dropout_transition=0,alimiter=limit=0.95:level=false:latency=true,apad,atrim=duration=${duration}[audio]`);
-  } else {
+  } else if(!still) {
     if (audioOnly) throw new InputError('Nessuna traccia audio attiva da esportare.');
     filters.push(`anullsrc=r=48000:cl=stereo,atrim=duration=${duration}[audio]`);
   }
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'taledit-export-'));
-  const fileName = `TALEDIT_Export_${resolution}_${randomUUID()}.${format}`;
+  const fileName = `${options.screenshot?'TALEDIT_Screenshot':still?'TALEDIT_Immagine':'TALEDIT_Export'}_${resolution}_${randomUUID()}.${format}`;
   const output = path.join(downloadsDir, fileName);
   try {
     if (!audioOnly) {
-      const subtitles: SubtitleItem[] = body.subtitles || [];
-      if (!Array.isArray(subtitles) || subtitles.length > 1000) throw new InputError('Sottotitoli non validi.');
+      const subtitles: SubtitleItem[] = body.clips.some((c:TimelineClip)=>c.type==='text')?timelineSubtitles(clips):body.subtitles || [];
+      if (!Array.isArray(subtitles) || subtitles.length > 2000) throw new InputError('Sottotitoli non validi.');
       let font='';
       if(subtitles.length) {
         const candidates=[path.join(process.env.WINDIR || 'C:\\Windows','Fonts','arial.ttf'),'/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf','/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf','/System/Library/Fonts/Supplemental/Arial.ttf'];
@@ -174,18 +182,30 @@ export async function exportMedia(body: any) {
       for (const [i, sub] of subtitles.entries()) {
         if (typeof sub.text !== 'string' || sub.text.length > 10000) throw new InputError('Testo sottotitolo non valido.');
         const start = number(sub.startTime, 0, 0, 86400), end = number(sub.endTime, 0, start, 86400);
+        const opacity=number(sub.transparency,100,0,100)/100,fadeIn=number(sub.fadeIn,0,0,600),fadeOut=number(sub.fadeOut,0,0,600),row=Math.floor(number(sub.row,0,0,99));
+        const alpha=`${opacity}*max(0,min(1,min(${fadeIn?`(t-${start})/${fadeIn}`:'1'},${fadeOut?`(${end}-t)/${fadeOut}`:'1'})))`;
         const textPath = path.join(temp, `${i}.txt`);
         await fs.writeFile(textPath, sub.text);
         const next = `sub${i}`;
-        filters.push(`[${layer}]drawtext=textfile='${i}.txt'${font}:expansion=none:fontsize=${Math.round(height / 24)}:fontcolor=yellow:box=1:boxcolor=black@0.75:boxborderw=8:x=(w-text_w)/2:y=h-text_h-30:enable='gte(t,${start})*lt(t,${end})'[${next}]`); layer = next;
+        filters.push(`[${layer}]drawtext=textfile='${i}.txt'${font}:expansion=none:fontsize=${Math.round(height / 24)}:fontcolor=yellow:box=1:boxcolor=black@0.75:boxborderw=8:x=(w-text_w)/2:y=h-text_h-30-${row*Math.round(height/24)*2}:alpha='${alpha}':enable='gte(t,${start})*lt(t,${end})'[${next}]`); layer = next;
       }
     }
     args.push('-filter_complex', filters.join(';'));
-    if (!audioOnly) args.push('-map', `[${layer}]`, '-c:v', 'libx264', '-preset', 'veryfast', '-threads', '2', '-pix_fmt', 'yuv420p', '-r', '25', '-b:v', `${videoKbps}k`);
-    args.push('-map', '[audio]', '-c:a', ['wav','avi'].includes(format) ? 'pcm_s16le' : format === 'mp3' ? 'libmp3lame' : 'aac');
-    if (!['wav','avi'].includes(format)) args.push('-b:a', `${audioKbps}k`);
-    if (['mp4','mov'].includes(format)) args.push('-movflags', '+faststart');
-    args.push('-t', String(duration), output);
+    if(still) {
+      const codec=({png:'png',jpg:'mjpeg',webp:'libwebp',bmp:'bmp',tiff:'tiff',gif:'gif'} as Record<string,string>)[format];
+      args.push('-map',`[${layer}]`,'-frames:v','1','-fps_mode','passthrough','-c:v',codec!,'-threads','2','-an');
+      if(format==='jpg')args.push('-q:v',String(Math.round(2+(100-weight)/100*25)));
+      if(format==='webp')args.push('-quality',String(weight));
+    }else{
+      if (!audioOnly) args.push('-map', `[${layer}]`, '-c:v',format==='webm'?'libvpx-vp9':'libx264', ...(format==='webm'?['-b:v',`${videoKbps}k`]:['-preset','veryfast','-b:v',`${videoKbps}k`]),'-threads','2','-pix_fmt','yuv420p','-r','25');
+      const audioCodec=({wav:'pcm_s16le',avi:'pcm_s16le',aiff:'pcm_s16be',mp3:'libmp3lame',flac:'flac',ogg:'libvorbis',opus:'libopus',webm:'libopus'} as Record<string,string>)[format] || 'aac';
+      args.push('-map','[audio]','-c:a',audioCodec);
+      if(!['pcm_s16le','pcm_s16be','flac'].includes(audioCodec))args.push('-b:a',`${audioCodec==='libopus'?Math.min(256,audioKbps):audioKbps}k`);
+      if(['mp4','mov','m4v','m4a'].includes(format))args.push('-movflags','+faststart');
+      if(format==='m4v')args.push('-f','mp4');
+      args.push('-t',String(duration));
+    }
+    args.push(output);
     await fs.mkdir(downloadsDir, { recursive: true });
     await run('ffmpeg', args, 300_000, temp);
     const info = await probe(output);

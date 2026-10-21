@@ -39,6 +39,7 @@ export const DetailsPanel: React.FC<DetailsPanelProps> = ({
               />
             </div>
 
+            {selectedClip.type==='text' && <label className="block">Testo della clip<textarea aria-label="Testo della clip" value={selectedClip.text || ''} onChange={e=>onUpdateClip({text:e.target.value,name:e.target.value.slice(0,35)})} className="w-full p-2 mt-2 bg-orange-950 rounded"/></label>}
             {/* TIPO */}
             <div>
               <span className="block text-[10px] uppercase font-bold text-gray-400 tracking-wider">
@@ -60,6 +61,7 @@ export const DetailsPanel: React.FC<DetailsPanelProps> = ({
                     EFFECT
                   </span>
                 )}
+                {selectedClip.type==='text' && <span className="text-orange-300">TESTO</span>}
                 {selectedClip.type === 'image' && (
                   <span className="text-amber-400 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800">
                     IMMAGINE
@@ -98,7 +100,7 @@ export const DetailsPanel: React.FC<DetailsPanelProps> = ({
               <span className="block text-[10px] uppercase font-bold text-gray-400 tracking-wider">
                 OPACITÀ / VOLUME
               </span>
-              {selectedClip.type === 'video' || selectedClip.type === 'image' ? (
+              {selectedClip.type === 'video' || selectedClip.type === 'image' || selectedClip.type==='text' ? (
                 <div className="mt-1.5 space-y-1">
                   <div className="flex justify-between text-[11px] font-mono">
                     <span className={selectedClip.type === 'image' ? 'text-amber-400' : 'text-cyan-400'}>

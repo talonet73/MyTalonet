@@ -1,3 +1,4 @@
+import {DraggableWindow} from './DraggableWindow';
 import {useEffect,useRef,useState} from 'react';
 import {X} from 'lucide-react';
 import type {MediaAsset,TimelineClip} from '../types/editor';
@@ -18,8 +19,8 @@ export function BGRemoverPanel({open,selected,onClose,onComplete}:{open:boolean;
   if(!open)return null;
   const running=job?.status==='running'||job?.status==='starting';
   const visual=selected && ['image','video'].includes(selected.type);
-  return <section role="dialog" aria-label="Pannello BG Remover" className="absolute top-[105px] right-4 z-40 w-[360px] max-h-[calc(100vh-150px)] overflow-y-auto rounded-xl border border-slate-600 bg-[#111a2b] shadow-2xl text-sm text-slate-200">
-    <header className="flex justify-between items-center p-3 border-b border-slate-700"><h2 className="font-bold text-cyan-300">BG Remover</h2><button aria-label="Chiudi BG Remover" onClick={onClose}><X size={18}/></button></header>
+  return <DraggableWindow as="section" role="dialog" aria-label="Pannello BG Remover" className="absolute top-[105px] right-4 z-40 w-[360px] max-h-[calc(100vh-150px)] overflow-y-auto rounded-xl border border-slate-600 bg-[#111a2b] shadow-2xl text-sm text-slate-200">
+    <header data-window-handle className="flex justify-between items-center p-3 border-b border-slate-700"><h2 className="font-bold text-cyan-300">BG Remover</h2><button aria-label="Chiudi BG Remover" onClick={onClose}><X size={18}/></button></header>
     <div className="p-4 space-y-4"><p>Rimuovi lo sfondo e conserva il soggetto principale, dando priorità a quello centrale. Il riconoscimento automatico può richiedere una scena più chiara.</p>
       <p className="text-xs text-slate-400">Gratuito con rembg, sul tuo computer. Le immagini diventano PNG trasparenti; i video WebM con trasparenza, mantenendo l’audio. L’elaborazione dei video può richiedere tempo.</p>
       <p>{visual?`Clip: ${selected.name}`:'Seleziona un video o un’immagine nella timeline.'}</p>
@@ -31,5 +32,5 @@ export function BGRemoverPanel({open,selected,onClose,onComplete}:{open:boolean;
       <button disabled={!visual || !ready || running} onClick={start} className="w-full rounded bg-cyan-700 hover:bg-cyan-600 disabled:opacity-40 p-3">Rimuovi sfondo</button>
       {job?.status==='running' && <button onClick={cancel} className="w-full rounded border border-slate-600 p-2">Annulla elaborazione</button>}
     </div>
-  </section>;
+  </DraggableWindow>;
 }

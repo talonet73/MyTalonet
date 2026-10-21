@@ -1,20 +1,22 @@
 import type { TimelineClip, SubtitleItem, Track } from '../types/editor';
-export type ExportFormat = 'mp4' | 'avi' | 'mov' | 'mp3' | 'wav';
+import {categoryOf,type ExportFormat} from './exportFormats';
+export type {ExportFormat} from './exportFormats';
 export interface ExportSettings {
   format: ExportFormat;
   resolution: '4K' | '1080p' | '720p';
   weightPercentage: number;
   durationSec: number;
   aspectRatio?: string;
+  frameTime?: number;
 }
 export interface ExportProgress { percentage: number; currentFrame: number; totalFrames: number; statusText: string }
 export function estimateExportFileSizeMB(format: ExportFormat, durationSec: number, weightPercentage: number, resolution: ExportSettings['resolution']) {
-  const audioKbps = ['wav','avi'].includes(format) ? 1536 : Math.round(64 + weightPercentage / 100 * 256);
-  const audioOnly = format === 'wav' || format === 'mp3';
+  const audioKbps = ['wav','avi','aiff'].includes(format) ? 1536 : Math.round(64 + weightPercentage / 100 * 256);
+  const audioOnly = categoryOf(format)==='audio';
   const videoKbps = (1500 + weightPercentage / 100 * 20500) * (resolution === '4K' ? 2.5 : resolution === '720p' ? .6 : 1);
   return { estimatedMB: Math.round((audioOnly ? audioKbps : videoKbps + audioKbps) * 1000 * durationSec / 8 / 1048576 * 10) / 10,
     bitrateFormatted: audioOnly ? `${audioKbps} kbps` : `${(videoKbps / 1000).toFixed(1)} Mbps`,
-    qualityLabel: format === 'wav' ? 'PCM 16-bit / 48 kHz stereo' : weightPercentage < 30 ? 'Compatto' : weightPercentage > 75 ? 'Alta qualità' : 'Bilanciato' };
+    qualityLabel: ['wav','aiff'].includes(format) ? 'PCM 16-bit / 48 kHz stereo' : ['png','bmp','tiff','flac'].includes(format)?'Senza perdita':weightPercentage < 30 ? 'Compatto' : weightPercentage > 75 ? 'Alta qualità' : 'Bilanciato' };
 }
 export async function executeProjectExport(settings: ExportSettings, clips: TimelineClip[], subtitles: SubtitleItem[], _previewCanvas: HTMLCanvasElement, onProgress: (p: ExportProgress) => void, tracks: Track[] = []) {
   if (!clips.some(c => c.type !== 'effect')) throw new Error('Aggiungi un media alla timeline prima di esportare.');

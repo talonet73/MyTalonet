@@ -13,7 +13,7 @@ export function visualFilters(clip: TimelineClip, width: number, height: number,
   const effects=clip.effects || [];
   if(effects.includes('blur'))parts.push(`gblur=sigma=${height/90*amount}`);
   if(effects.includes('glitch'))parts.push(`rgbashift=rh=${Math.round(width*.004*amount)}:bh=-${Math.round(width*.004*amount)}`);
-  const clock=`((t${global?`-${clip.startTime}`:''}+${clip.type==='effect'?(clip.offset||0):0})*${(clip.speed??5)/5})`;
+  const clock=`((t${global?`-${clip.startTime}`:''}+${clip.animationOffset ?? (clip.type==='effect'?(clip.offset||0):0)})*${(clip.speed??5)/5})`;
   const progress=`min(1,max(0,${clock}/${clip.effectSpan ?? clip.duration}))`;
   const zoom=[effects.includes('zoom_in')?`(1+${.25*amount}*${progress})`:'1',effects.includes('zoom_out')?`(1+${.25*amount}*(1-${progress}))`:'1',effects.includes('camera_shake')?String(1+.04*amount):'1'].join('*');
   if(effects.some(e=>['camera_shake','zoom_in','zoom_out'].includes(e))) {

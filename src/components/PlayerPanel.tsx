@@ -43,6 +43,11 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
   const [playerError,setPlayerError]=useState('');
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const screenRef=useRef<HTMLDivElement>(null);
+  const [screen,setScreen]=useState({width:640,height:360});
+  useEffect(()=>{if(!screenRef.current)return;const observer=new ResizeObserver(entries=>{const {width,height}=entries[0].contentRect;setScreen({width,height});});observer.observe(screenRef.current);return()=>observer.disconnect();},[]);
+  const ratio=aspectRatio==='9:16'?9/16:aspectRatio==='1:1'?1:aspectRatio==='4:3'?4/3:16/9;
+  const fittedWidth=Math.max(1,Math.min(screen.width,screen.height*ratio));
 
   // Formatter for 00:01:22:15 style timecode
   const formatFullTimecode = (seconds: number) => {
@@ -162,18 +167,18 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
   return (
     <div
       ref={containerRef}
-      className="flex flex-col h-full bg-[#111622] text-white border-r border-[#1e293b] select-none"
+      className="flex flex-col min-h-0 min-w-0 h-full bg-[#111622] text-white border-r border-[#1e293b] select-none"
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-[#1e293b] text-xs">
+      <div className="shrink-0 flex items-center justify-between px-3 py-1.5 border-b border-[#1e293b] text-xs">
         <span className="font-semibold text-gray-300">Player</span>
         <div className="relative"><button aria-label="Opzioni player" aria-expanded={menuOpen} onClick={()=>setMenuOpen(p=>!p)}><Menu className="w-3.5 h-3.5"/></button>{menuOpen && <div className="absolute right-0 top-5 z-20 bg-slate-800 border border-slate-600 rounded w-44 p-2 space-y-2"><button className="block" onClick={()=>{onSeek(0);setMenuOpen(false);}}>Vai all’inizio</button><button className="block" onClick={()=>{void toggleFullscreen();setMenuOpen(false);}}>Apri schermo intero</button></div>}</div>
       </div>
 
       {playerError && <button role="alert" onClick={()=>setPlayerError('')} className="text-xs text-rose-300 p-2">{playerError}</button>}
       {/* Video Screen Area */}
-      <div className="flex-1 flex items-center justify-center p-2 bg-[#0a0d14] relative overflow-hidden">
-        <div className={`relative ${aspectClass} w-full max-w-full flex items-center justify-center shadow-2xl rounded border border-[#1e293b] bg-black overflow-hidden`}>
+      <div ref={screenRef} data-testid="player-screen" className="flex-1 min-h-0 min-w-0 flex items-center justify-center p-2 bg-[#0a0d14] relative overflow-hidden">
+        <div data-testid="player-frame" style={{width:fittedWidth,height:fittedWidth/ratio}} className="relative shrink-0 flex items-center justify-center shadow-2xl rounded border border-[#1e293b] bg-black overflow-hidden">
           <canvas data-testid="player-canvas"
             ref={canvasRef}
             width={aspectRatio === '9:16' ? 360 : aspectRatio === '1:1' ? 360 : aspectRatio === '4:3' ? 480 : 640}
@@ -195,7 +200,7 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
       </div>
 
       {/* Player Bottom Bar matching screenshot */}
-      <div className="flex items-center justify-between px-3 py-2 bg-[#121826] border-t border-[#1e293b] text-xs text-gray-300">
+      <div className="shrink-0 flex flex-wrap gap-2 items-center justify-between px-3 py-2 bg-[#121826] border-t border-[#1e293b] text-xs text-gray-300">
         {/* Timecodes */}
         <div className="flex items-center gap-2 font-mono text-[11px]">
           <span className="text-cyan-400 font-semibold">{formatFullTimecode(currentTime)}</span>

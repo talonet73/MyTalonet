@@ -1,3 +1,5 @@
+import {AudioWaveform} from './AudioWaveform';
+import {DraggableWindow} from './DraggableWindow';
 import React, { useRef, useState, useEffect } from 'react';
 import { TimelineClip, Track, TimelineMarker, TrackType } from '../types/editor';
 import {
@@ -38,6 +40,7 @@ interface TimelineProps {
   onAddMarker: (time: number) => void;
   onUpdateMarker: (marker: TimelineMarker) => void;
   onDeleteMarker: (markerId: string) => void;
+  onResizeTrack:(id:string,height:number)=>void;
   onDropAsset?: (asset: any, trackId: string, time: number) => void;
   onCommitHistory?: () => void;
   onCutClip?: () => void;
@@ -66,7 +69,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   onAddMarker,
   onUpdateMarker,
   onDeleteMarker,
-  onDropAsset,
+  onDropAsset,onResizeTrack,
   onCommitHistory,
   onCutClip,
   onDuplicateClip,
@@ -163,7 +166,11 @@ export const Timeline: React.FC<TimelineProps> = ({
 
   // Fixed heights for 100% strict alignment between track headers and timeline lanes
   const HEADER_RULER_HEIGHT = 36; // px
-  const TRACK_ROW_HEIGHT = 58; // px
+  const [viewportHeight,setViewportHeight]=useState(360);
+  useEffect(()=>{if(!containerRef.current)return;const observer=new ResizeObserver(entries=>setViewportHeight(entries[0].contentRect.height));observer.observe(containerRef.current);return()=>observer.disconnect();},[]);
+  const density=Math.max(.4,Math.min(1,(viewportHeight-72)/300));
+  const rowHeight=(track:Track)=>Math.max(24,(track.height || 58)*density);
+  const trackResize=useRef<{id:string;y:number;height:number}|null>(null);
 
   const durationSec = Math.max(totalDuration, 60);
   const timelinePixelWidth = durationSec * zoom;
@@ -209,14 +216,14 @@ export const Timeline: React.FC<TimelineProps> = ({
           const sourceClip=clips.find(c=>c.id===trimmingClip.id);
           const hasSourceTime=sourceClip && ['video','audio','effect'].includes(sourceClip.type);
           const maxLeftShift = hasSourceTime ? Math.min(trimmingClip.originalStartTime,trimmingClip.originalOffset) : trimmingClip.originalStartTime;
-          const maxRightShift = trimmingClip.originalDuration - 0.5; // at least 0.5s duration
+          const maxRightShift = trimmingClip.originalDuration - .04; // at least 0.5s duration
           const clampedDelta = Math.max(-maxLeftShift, Math.min(maxRightShift, deltaX));
           const newStart = Math.round((trimmingClip.originalStartTime + clampedDelta) * 10) / 10;
           const newDuration = Math.round((trimmingClip.originalDuration - clampedDelta) * 10) / 10;
           onUpdateClip(trimmingClip.id, { startTime: newStart, duration: newDuration, ...(hasSourceTime?{offset:Math.max(0,Math.round((trimmingClip.originalOffset+clampedDelta)*10)/10)}:{}) });
         } else {
           // Adjust duration from right
-          const newDuration = Math.max(0.5, Math.round((trimmingClip.originalDuration + deltaX) * 10) / 10);
+          const newDuration = Math.max(.04, Math.round((trimmingClip.originalDuration + deltaX) * 10) / 10);
           onUpdateClip(trimmingClip.id, { duration: newDuration });
         }
       }
@@ -267,8 +274,8 @@ export const Timeline: React.FC<TimelineProps> = ({
             const clipRight = clipLeft + Math.max(35, clip.duration * zoom);
             const trackIdx = tracks.findIndex(t => t.id === clip.trackId);
             if (trackIdx === -1) return false;
-            const trackTop = trackIdx * TRACK_ROW_HEIGHT;
-            const trackBottom = trackTop + TRACK_ROW_HEIGHT;
+            const trackTop = tracks.slice(0,trackIdx).reduce((sum,t)=>sum+rowHeight(t),0);
+            const trackBottom = trackTop + rowHeight(tracks[trackIdx]);
 
             return clipLeft <= maxX && clipRight >= minX && trackTop <= maxY && trackBottom >= minY;
           }).map(c => c.id);
@@ -302,7 +309,7 @@ export const Timeline: React.FC<TimelineProps> = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isScrubbing, draggingClip, trimmingClip, draggingHandle, selectionBox, zoom, durationSec, onSeek, onUpdateClip, clips, tracks, onSelectMultipleClips]);
+  }, [isScrubbing, draggingClip, trimmingClip, draggingHandle, selectionBox, zoom, durationSec, density, onSeek, onUpdateClip, clips, tracks, onSelectMultipleClips]);
 
   // Handle CTRL + Mouse Wheel to zoom in / zoom out
   useEffect(() => {
@@ -350,7 +357,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   const handleConfirmAddTrack = () => {
     const autoName =
       newTrackName.trim() ||
-      `${newTrackType.toUpperCase()} ${(tracks.filter(t => t.type === newTrackType).length + 1)
+      `${newTrackType==='text'?'TESTO':newTrackType.toUpperCase()} ${(tracks.filter(t => t.type === newTrackType).length + 1)
         .toString()
         .padStart(2, '0')}`;
     onAddTrack(newTrackType, autoName);
@@ -373,7 +380,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           {/* Header Corner aligned with ruler */}
           <div
             style={{ height: `${HEADER_RULER_HEIGHT}px` }}
-            className="border-b border-[#1b2233] flex items-center justify-between px-2 bg-[#090d14] text-[10px] text-gray-400 font-mono box-border"
+            className="shrink-0 border-b border-[#1b2233] flex items-center justify-between px-2 bg-[#090d14] text-[10px] text-gray-400 font-mono box-border"
           >
             <span className="font-bold tracking-wider">TRACKS</span>
             <button
@@ -392,7 +399,7 @@ export const Timeline: React.FC<TimelineProps> = ({
             const isAudio = track.type === 'audio';
             const isImage = track.type === 'image';
 
-            const headerStyle = isEffects
+            const headerStyle = track.type==='text' ? 'bg-orange-950 text-orange-200 border-orange-700' : isEffects
               ? 'bg-[#3b171e] text-rose-200 border-rose-900/50'
               : isVideo
               ? 'bg-[#0f2844] text-blue-200 border-blue-900/50'
@@ -403,9 +410,14 @@ export const Timeline: React.FC<TimelineProps> = ({
             return (
               <div
                 key={track.id}
-                style={{ height: `${TRACK_ROW_HEIGHT}px` }}
-                className={`border-b border-[#1b2233] px-2 flex items-center justify-between box-border ${headerStyle}`}
+                data-track-header={track.id}
+                style={{ height: `${rowHeight(track)}px`,'--track-row-height':`${rowHeight(track)}px` } as React.CSSProperties}
+                className={`relative shrink-0 border-b border-[#1b2233] px-2 flex items-center justify-between box-border ${headerStyle}`}
               >
+                <div role="separator" aria-orientation="horizontal" title={`Ridimensiona pista ${track.name}`} data-track-resize={track.id} className="absolute top-0 left-0 right-0 h-1.5 cursor-ns-resize bg-white/10 hover:bg-cyan-400 z-30"
+                  onPointerDown={e=>{e.preventDefault();e.stopPropagation();e.currentTarget.setPointerCapture(e.pointerId);trackResize.current={id:track.id,y:e.clientY,height:track.height||58};}}
+                  onPointerMove={e=>{const d=trackResize.current;if(d)onResizeTrack(d.id,Math.max(32,Math.min(360,d.height+(e.clientY-d.y)/density)));}}
+                  onPointerUp={e=>{trackResize.current=null;e.currentTarget.releasePointerCapture(e.pointerId);}} onPointerCancel={()=>{trackResize.current=null;}}/>
                 <div className="flex flex-col min-w-0 pr-1">
                   <span className="font-bold text-[11px] truncate tracking-wide">
                     {track.name}
@@ -452,7 +464,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           })}
 
           {/* Quick Add Track Button at bottom of headers list */}
-          <div className="p-2 border-b border-[#1b2233]">
+          <div className="shrink-0 p-2 border-b border-[#1b2233]">
             <button
               onClick={() => setIsAddTrackOpen(true)}
               className="w-full py-1 rounded bg-[#162032] hover:bg-[#1f2d45] border border-[#273852] text-[10px] font-bold text-cyan-300 flex items-center justify-center gap-1 transition-colors"
@@ -562,7 +574,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                   <div
                     key={track.id}
                     data-track-id={track.id}
-                    style={{ height: `${TRACK_ROW_HEIGHT}px` }}
+                    style={{ height: `${rowHeight(track)}px`,'--track-row-height':`${rowHeight(track)}px` } as React.CSSProperties}
                     onDragOver={e => {
                       e.preventDefault();
                       e.dataTransfer.dropEffect = 'copy';
@@ -624,6 +636,13 @@ export const Timeline: React.FC<TimelineProps> = ({
                       const clipLeft = clip.startTime * zoom;
                       const clipWidth = Math.max(35, clip.duration * zoom);
 
+                      if(clip.type==='text')return <div key={clip.id} data-clip-id={clip.id} style={{left:clipLeft,width:clipWidth}} className={`absolute top-1 bottom-1 rounded bg-orange-500 text-black p-1.5 cursor-grab overflow-hidden ${isSelected?'ring-2 ring-cyan-300 z-30':''}`}
+                        onClick={e=>{e.stopPropagation();onSelectClip(clip.id,e.shiftKey||e.ctrlKey||e.metaKey);}}
+                        onMouseDown={e=>{if(e.button!==0)return;e.stopPropagation();onSelectClip(clip.id);setDraggingClip({id:clip.id,startX:e.clientX,originalStartTime:clip.startTime});}}
+                        onContextMenu={e=>{e.preventDefault();e.stopPropagation();onSelectClip(clip.id);setContextMenu({x:e.clientX,y:e.clientY,clip});}}>
+                        <span className="text-xs font-bold whitespace-pre">{clip.text || clip.name}</span>
+                        {(['start','end'] as const).map(edge=><div key={edge} data-handle={`trim-${edge}`} title={edge==='start'?"Trascina per accorciare o allungare dall'inizio":"Trascina per accorciare o allungare dalla fine"} className={`absolute top-0 bottom-0 w-2 cursor-ew-resize bg-black/20 hover:bg-white ${edge==='start'?'left-0':'right-0'}`} onMouseDown={e=>{e.stopPropagation();setTrimmingClip({id:clip.id,edge,startX:e.clientX,originalStartTime:clip.startTime,originalDuration:clip.duration,originalOffset:clip.offset || 0});}}/>)}
+                      </div>;
                       // 1. EFFECTS TRACK (ROSSO)
                       if (clip.type === 'effect') {
                         const fadeInWidth = Math.min(clipWidth / 2, clip.fadeIn * zoom);
@@ -897,7 +916,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                                   originalVal: clip.transparency,
                                 });
                               }}
-                              style={{ top: `${Math.min(36, Math.max(6, (handleTopPercent / 100) * 42))}px` }}
+                              style={{ top: `${Math.min(rowHeight(track)-16, Math.max(4, (handleTopPercent / 100) * Math.max(8,rowHeight(track)-20)))}px` }}
                               title={`Trasparenza: ${clip.transparency}% (Trascina in alto/basso)`}
                               className="absolute left-0 right-0 h-4 -mt-2 cursor-ns-resize flex items-center justify-between px-1 z-30 group/handle"
                             >
@@ -976,6 +995,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                                 : 'hover:brightness-110'
                             }`}
                           >
+                            <AudioWaveform url={clip.mediaUrl} offset={clip.offset || 0} duration={clip.duration}/>
                             {isSelected && (
                               <span className="absolute -top-2.5 right-1 bg-cyan-400 text-black font-extrabold text-[8px] px-1 py-0.2 rounded shadow pointer-events-none tracking-wider z-40">
                                 SELEZIONATO
@@ -1033,7 +1053,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                                   originalVal: clip.volumeDb,
                                 });
                               }}
-                              style={{ top: `${Math.min(36, Math.max(6, (handleTopPercent / 100) * 42))}px` }}
+                              style={{ top: `${Math.min(rowHeight(track)-16, Math.max(4, (handleTopPercent / 100) * Math.max(8,rowHeight(track)-20)))}px` }}
                               title={`Volume: ${clip.volumeDb >= 0 ? `+${clip.volumeDb}` : clip.volumeDb} dB`}
                               className="absolute left-0 right-0 h-4 -mt-2 cursor-ns-resize flex items-center justify-between px-1 z-30 group/handle"
                             >
@@ -1167,7 +1187,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                                   originalVal: clip.transparency,
                                 });
                               }}
-                              style={{ top: `${Math.min(36, Math.max(6, (handleTopPercent / 100) * 42))}px` }}
+                              style={{ top: `${Math.min(rowHeight(track)-16, Math.max(4, (handleTopPercent / 100) * Math.max(8,rowHeight(track)-20)))}px` }}
                               title={`Trasparenza: ${clip.transparency}%`}
                               className="absolute left-0 right-0 h-4 -mt-2 cursor-ns-resize flex items-center justify-between px-1 z-30 group/handle"
                             >
@@ -1266,8 +1286,8 @@ export const Timeline: React.FC<TimelineProps> = ({
       {/* Modal: Aggiungi Nuova Pista */}
       {isAddTrackOpen && (
         <div role="dialog" aria-label="Nuova traccia" className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-sm bg-[#101625] border border-[#2d3b55] rounded-xl shadow-2xl p-4 text-white">
-            <div className="flex items-center justify-between pb-2 border-b border-[#212d45] mb-3">
+          <DraggableWindow className="w-full max-w-sm bg-[#101625] border border-[#2d3b55] rounded-xl shadow-2xl p-4 text-white">
+            <div data-window-handle className="flex items-center justify-between pb-2 border-b border-[#212d45] mb-3">
               <h4 className="font-bold text-sm text-cyan-300 flex items-center gap-2">
                 <Plus className="w-4 h-4" />
                 Aggiungi Nuova Pista
@@ -1319,6 +1339,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                     🔴 Effetti (Rosso)
                   </button>
 
+                  <button type="button" onClick={()=>setNewTrackType('text')} className={`p-2 rounded border text-left font-bold ${newTrackType==='text'?'bg-orange-900 border-orange-400':'border-slate-600'}`}>🟠 Testo (Arancione)</button>
                   <button
                     type="button"
                     onClick={() => setNewTrackType('image')}
@@ -1363,15 +1384,15 @@ export const Timeline: React.FC<TimelineProps> = ({
                 </button>
               </div>
             </div>
-          </div>
+          </DraggableWindow>
         </div>
       )}
 
       {/* Modal: Modifica / Descrizione Marker */}
       {activeMarkerEdit && (
         <div role="dialog" aria-label="Dettagli marker" className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-sm bg-[#101625] border border-[#2d3b55] rounded-xl shadow-2xl p-4 text-white">
-            <div className="flex items-center justify-between pb-2 border-b border-[#212d45] mb-3">
+          <DraggableWindow className="w-full max-w-sm bg-[#101625] border border-[#2d3b55] rounded-xl shadow-2xl p-4 text-white">
+            <div data-window-handle className="flex items-center justify-between pb-2 border-b border-[#212d45] mb-3">
               <h4 className="font-bold text-sm text-amber-400 flex items-center gap-1.5">
                 <Flag className="w-4 h-4 fill-amber-400" />
                 Dettagli Marker ({activeMarkerEdit.time.toFixed(1)}s)
@@ -1457,7 +1478,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                 </div>
               </div>
             </div>
-          </div>
+          </DraggableWindow>
         </div>
       )}
 

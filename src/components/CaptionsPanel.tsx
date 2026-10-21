@@ -11,6 +11,8 @@ interface CaptionsPanelProps {
   setDeleteCurrentCaptions: (del: boolean) => void;
   subtitles: SubtitleItem[];
   onGenerateCaptions: () => Promise<void>;
+  onInsertCaptions:()=>void;
+  hasGeneratedCaptions:boolean;
   onUpdateSubtitle: (id: string, text: string) => void;
   onDeleteSubtitle: (id: string) => void;
 }
@@ -23,7 +25,7 @@ export const CaptionsPanel: React.FC<CaptionsPanelProps> = ({
   deleteCurrentCaptions,
   setDeleteCurrentCaptions,
   subtitles,
-  onGenerateCaptions,
+  onGenerateCaptions, onInsertCaptions,hasGeneratedCaptions,
   onUpdateSubtitle,
   onDeleteSubtitle,
 }) => {
@@ -88,7 +90,7 @@ export const CaptionsPanel: React.FC<CaptionsPanelProps> = ({
           {subtitles.length === 0 ? (
             <div className="py-6 text-center text-gray-400 text-xs flex flex-col items-center">
               <span className="text-gray-500 mb-1">Nessun sottotitolo presente</span>
-              <span className="text-[11px] text-gray-400">Clicca "GENERATE" per trascrivere automaticamente l'audio</span>
+              <span className="text-[11px] text-gray-400">Clicca "Trascrivi audio", correggi i testi e poi premi GENERATE.</span>
             </div>
           ) : (
             subtitles.map(sub => (
@@ -124,6 +126,7 @@ export const CaptionsPanel: React.FC<CaptionsPanelProps> = ({
         </div>
       </div>
 
+      <button onClick={handleGenerate} disabled={isGenerating} className="my-2 p-2 rounded bg-slate-700 disabled:opacity-40">{isGenerating?'Trascrizione…':'Trascrivi audio'}</button>
       {/* Bottom Controls */}
       <div className="pt-3 border-t border-[#232c40] flex items-center justify-between gap-2">
         <label className="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer">
@@ -137,12 +140,12 @@ export const CaptionsPanel: React.FC<CaptionsPanelProps> = ({
         </label>
 
         <button
-          onClick={handleGenerate}
-          disabled={isGenerating}
+          onClick={onInsertCaptions}
+          disabled={isGenerating || (subtitles.length===0 && !hasGeneratedCaptions)}
           className="px-4 py-2 bg-[#0d9488] hover:bg-[#0f766e] text-white rounded text-xs font-bold tracking-wide transition-all shadow-md flex items-center gap-1.5 disabled:opacity-50"
         >
           <Wand2 className="w-3.5 h-3.5" />
-          <span>{isGenerating ? 'GENERATING...' : 'GENERATE'}</span>
+          <span>GENERATE</span>
         </button>
       </div>
     </div>

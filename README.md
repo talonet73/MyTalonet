@@ -22,7 +22,7 @@ npm run build
 NODE_ENV=production npm start
 ```
 
-Importa i media con **Importa** nella barra superiore o **Import** nello stage. I file sono verificati con ffprobe e salvati con nomi univoci in `media_downloads/` (oppure `MEDIA_DIR`). Doppio clic sul media per aggiungerlo alla timeline al cursore. I video con audio creano una coppia video/audio collegata. Taglio, spostamento, copia e duplicazione mantengono la coppia sincronizzata. Ogni tipo entra soltanto nella propria traccia: IMMAGINI, VIDEO, AUDIO, EFFECTS. Aprendo vecchi progetti, i contenuti fuori posto vengono spostati nella traccia corretta, creandola se manca.
+Importa i media con **Importa** nella barra superiore o **Import** nello stage. I file sono verificati con ffprobe e salvati con nomi univoci in `media_downloads/` (oppure `MEDIA_DIR`). Doppio clic sul media per aggiungerlo alla timeline al cursore. I video con audio creano una coppia video/audio collegata. Taglio, spostamento, copia e duplicazione mantengono la coppia sincronizzata. Ogni tipo entra soltanto nella propria traccia: IMMAGINI, VIDEO, AUDIO, EFFECTS e TESTO. La pista arancione TESTO è presente di default; puoi aggiungerne altre da Nuova Pista. Aprendo vecchi progetti, i contenuti fuori posto vengono spostati nella traccia corretta, creandola se manca.
 
 I progetti `.tal` conservano timeline, proporzioni e riferimenti ai file sul server; non incorporano i media. Conserva la cartella media insieme ai progetti. Usa **Salva** prima di chiudere: la timeline condivisa MCP è in memoria e non sopravvive al riavvio del server. Le vecchie URL `blob:` scadute richiedono la reimportazione del file originale.
 
@@ -32,7 +32,7 @@ I cinque pulsanti aprono pannelli reali, richiudibili con la X o cliccando nuova
 
 - **Effects**: nove anteprime della scena campione, calcolate con lo stesso motore del player: Camera a mano, Zoom in, Zoom out, Luce morbida, Vintage, Cinema, Bianco e nero, Sfocatura e Glitch. Trascina l’anteprima soltanto sulla traccia EFFECTS; il clic la inserisce al cursore. Ogni mattoncino ha maniglie di durata, taglio, copia/incolla e cronologia. Cliccalo per aprire i controlli **Intensità** e **Velocità**, entrambi da 0 a 10, predefiniti a 5. Intensità 0 disattiva l’effetto; Velocità 0 ferma il movimento o la pulsazione. Per gli effetti di colore/sfocatura la velocità regola il ritmo di una lieve pulsazione. Gli effetti agiscono sull’immagine composta solo nel proprio intervallo; più mattoncini sovrapposti si combinano.
 - **Transitions**: dissolvenza in entrata/uscita, con durata scelta, oppure dissolvenza incrociata. Per quest’ultima accosta due clip sulla stessa traccia e seleziona la seconda: le clip vengono sovrapposte e quelle successive della stessa traccia, con l’audio collegato, vengono anticipate. L’audio viene sfumato e il video entrante si sovrappone a quello uscente senza un passaggio intermedio al nero.
-- **Captions**: apre il pannello per scegliere la lingua, generare sottotitoli reali con Whisper, correggere i testi ed eliminare righe. La traduzione disponibile è verso l’inglese.
+- **Captions**: premi **Trascrivi audio**, correggi i testi e poi **GENERATE**. Quest’ultimo inserisce o aggiorna mattoncini arancioni nella pista TESTO ai tempi del parlato, senza ripetere la trascrizione e perdere le correzioni. I testi della timeline si possono spostare, tagliare, copiare e modificare da DETAILS. La traduzione disponibile è verso l’inglese. Eliminando tutte le righe puoi premere GENERATE per rimuovere i precedenti testi generati; le copie manuali rimangono indipendenti.
 - **Adjustment**: luminosità, contrasto, saturazione, esposizione, temperatura, tinta e nitidezza della clip selezionata. **Ripristina regolazioni** riporta i valori iniziali.
 - **BG Remover**: rimuove lo sfondo della clip video o immagine selezionata, conserva un soggetto principale e genera un nuovo file nello stage. La clip viene sostituita se il contenuto selezionato non è cambiato nel frattempo; **Annulla** ripristina la precedente.
 
@@ -42,9 +42,19 @@ I comandi non disponibili (ad esempio Cestino senza selezione o Incolla prima di
 
 ## Export
 
-MP4/MOV: H.264 + AAC. AVI: H.264 + PCM 16-bit, per evitare alterazioni dell’audio MP3 nel contenitore AVI. MP3 e WAV contengono audio realmente codificato nel formato richiesto. WAV/AVI usano PCM stereo 48 kHz.
+La finestra separa **Video**, **Audio** e **Immagine**:
 
-Il server compone i media reali rispettando offset, tempi, opacità, volume, mute/solo, immagini, effetti e sottotitoli. L’audio dei video separati in due clip viene mixato una sola volta. Clip video prive di audio non fanno fallire l’export. I media mancanti causano un errore visibile: nessun falso successo e nessun fallback con estensione ingannevole. Proporzioni 16:9, 9:16, 1:1 e 4:3; risoluzioni 720p, 1080p, 4K. Limiti dichiarati: 600 secondi, 200 clip, due export simultanei, caricamenti da 500 MB.
+| Tipo | Formati disponibili |
+| --- | --- |
+| Video | MP4, MOV, AVI, MKV, WEBM, M4V |
+| Audio | MP3, WAV, M4A, AAC, FLAC, OGG, OPUS, AIFF |
+| Immagine | PNG, JPG, WEBP, BMP, TIFF, GIF (fotogramma singolo) |
+
+Video H.264/AAC, tranne WebM VP9/Opus e AVI H.264/PCM. WAV/AVI usano PCM 16-bit stereo 48 kHz; AIFF PCM big endian. FLAC è senza perdita. M4A e AAC usano AAC; OGG usa Vorbis; OPUS usa Opus.
+
+**Immagine** è abilitata quando la pista IMMAGINI contiene almeno una clip. Il tempo scelto deve mostrare un’immagine attiva: vengono composte le immagini, gli effetti e i testi a quel tempo; le tracce video/audio sono escluse. I formati immagine salvano un solo fotogramma. Il tasto **Screenshot**, con macchina fotografica, invece salva in PNG il fotogramma video al cursore con il resto del montaggio visibile, a 1080p e nelle proporzioni del progetto. È disabilitato se al cursore non c’è un video attivo.
+
+Il server compone i media reali rispettando offset, tempi, opacità, volume, mute/solo, immagini, effetti e sottotitoli. L’audio dei video separati in due clip viene mixato una sola volta. Clip video prive di audio non fanno fallire l’export. I media mancanti causano un errore visibile: nessun falso successo e nessun fallback con estensione ingannevole. Proporzioni 16:9, 9:16, 1:1 e 4:3; risoluzioni 720p, 1080p, 4K. Limiti dichiarati: 600 secondi, 200 clip multimediali più 2000 testi, due export simultanei, caricamenti da 500 MB.
 
 La dimensione indicata è una stima basata sul bitrate, non una promessa di dimensione esatta. L’anteprima degli effetti è indicativa; FFmpeg è il render definitivo. La percentuale UI indica le fasi di lavoro, non un conteggio dei frame FFmpeg.
 
@@ -67,7 +77,7 @@ npm run test:whisper
 
 Lo script crea `/workspace/.venv-whisper`, installa le versioni bloccate in `scripts/requirements-whisper.lock` (faster-whisper 1.2.1, **PyAV 16.1.0**, CTranslate2 4.8.3) e scarica i pesi dal repository ufficiale `Systran/faster-whisper-small` su Hugging Face in `/workspace/.cache/taledit/whisper-small`. Per installazioni fuori dal cloud imposta `WHISPER_VENV`, `WHISPER_PYTHON` e `WHISPER_MODEL_DIR` su percorsi locali scrivibili. Il modello occupa circa 500 MB. La cache Hugging Face/Xet è impostata sotto `/workspace/.cache/huggingface`, scrivibile in questo ambiente. PyAV 19.0.2 è incompatibile con l’argomento `metadata_errors` usato dal decoder di faster-whisper 1.2.1: non aggiornare questo pacchetto senza ripetere i test reali. Dopo l’installazione l’inferenza è offline; nessun download implicito avviene durante la trascrizione.
 
-`GET /api/captions/status` indica se il modello è disponibile. **GENERATE** trascrive il mix effettivo della timeline, inclusi offset e mute/solo. La lingua selezionata è quella parlata. L’opzione di traduzione produce l’inglese, destinazione supportata da Whisper; non promette traduzioni verso altre lingue. I segmenti sono modificabili ed esportabili. Il filtro VAD, con margine vocale di 100 ms, riduce gli anticipi dovuti al silenzio iniziale e ha superato il test senza sottotitoli inventati sul silenzio. I timestamp dei segmenti sono stime del modello, non allineamento parola per parola. L’accuratezza va verificata sui propri contenuti.
+`GET /api/captions/status` indica se il modello è disponibile. **Trascrivi audio** trascrive il mix effettivo della timeline, inclusi offset e mute/solo. La lingua selezionata è quella parlata. L’opzione di traduzione produce l’inglese, destinazione supportata da Whisper; non promette traduzioni verso altre lingue. I segmenti sono modificabili ed esportabili. Il filtro VAD, con margine vocale di 100 ms, riduce gli anticipi dovuti al silenzio iniziale e ha superato il test senza sottotitoli inventati sul silenzio. I timestamp dei segmenti sono stime del modello, non allineamento parola per parola. L’accuratezza va verificata sui propri contenuti.
 
 Il primo download richiede `huggingface.co`, `*.huggingface.co`, `*.hf.co`, `*.xethub.hf.co`, oltre ai domini PyPI. Un modello mancante genera un errore esplicito, senza sottotitoli predefiniti.
 
@@ -112,3 +122,11 @@ Su Linux, prepara una volta con `bash scripts/setup-bg.sh`; su Windows `2-AVVIA-
 Il modello stima la maschera e conserva la componente rilevante vicina al centro; sui video usa anche la posizione precedente. Non identifica semanticamente una persona specifica e non garantisce bordi perfetti su capelli, trasparenze, soggetti piccoli o movimenti difficili. Le immagini diventano PNG RGBA; i video WebM VP9 con alpha a 25 fps, audio Opus e dimensioni originali (eventuale padding di un pixel per dimensioni pari). L’export MP4 compone la trasparenza sul resto del montaggio. Si elabora solo l’intervallo selezionato: l’audio collegato mantiene la sorgente originale e il suo offset anche nei tagli successivi. Puoi annullare il lavoro dal pannello; chiuderlo lascia proseguire l’elaborazione.
 
 Limiti: un lavoro BG per volta, massimo 10 minuti per clip, 33 megapixel per fotogramma e 30 minuti di elaborazione. È un’elaborazione offline su CPU, non un effetto in tempo reale. Il primo download richiede PyPI, `github.com` e `release-assets.githubusercontent.com`.
+
+## Finestre e dimensioni della timeline
+
+Tutte le finestre dell’app si spostano trascinando la barra del titolo, senza interferire con i pulsanti e i campi. Il player adatta il fotogramma completo alla larghezza e all’altezza disponibili, comprese le proporzioni verticali e lo schermo intero. Il divisore orizzontale cambia lo spazio della timeline e l’altezza dei mattoncini. La maniglietta sopra il nome di ogni pista ne cambia singolarmente l’altezza; nome, corsia e clip restano allineati. Le altezze sono salvate nel progetto.
+
+Le clip AUDIO mostrano onde calcolate dai campioni del file, rispettando offset e durata. Il volume è indicato dal controllo dedicato; l’onda viene adattata all’altezza per renderla leggibile. Se la sorgente non contiene audio o non è disponibile, viene mostrato un esito esplicito senza onde inventate.
+
+Verifiche aggiuntive di testo, finestre, ridimensionamento, formati e Screenshot: [docs/timeline-export-verification.md](docs/timeline-export-verification.md).

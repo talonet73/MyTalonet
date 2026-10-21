@@ -55,9 +55,9 @@ Il test browser provoca un errore 403 controllato e successivamente carica un ve
 ## Esito finale dei comandi eseguiti
 
 - `npm run lint`: **PASS**, controllo TypeScript.
-- `npm test`: **PASS, 29/29**, inclusa la trascrizione reale via API, export, mix, immagini, mute/solo e MCP HTTP/SSE.
+- `npm test`: **PASS, 47/47**, inclusa la trascrizione reale via API, export, mix, immagini, mute/solo e MCP HTTP/SSE.
 - `npm run test:whisper`: **PASS**, riconoscimento di parlato noto e assenza di testo sul silenzio.
-- `npm run test:e2e`: **PASS, 15/15** test browser, inclusi fallback locale dopo 403 e download dell’export reale.
+- `npm run test:e2e`: **PASS, 19/19** test browser, inclusi fallback locale dopo 403 e download dell’export reale.
 - `git diff --check`: **PASS**, verifica formale delle modifiche.
 - `pip check`: **PASS**, nessun requisito incompatibile.
 - Build produzione eseguita dal runner browser: **PASS**.

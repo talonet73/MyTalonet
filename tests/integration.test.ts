@@ -35,7 +35,7 @@ async function exported(body: any) {
   return { file, info: JSON.parse(stdout), data: result.data };
 }
 async function pixel(file: string, t: number) {
-  const { stdout } = await promisify(execFile)('ffmpeg', ['-v','error','-ss',String(t),'-i',file,'-frames:v','1','-vf','scale=1:1','-pix_fmt','rgb24','-f','rawvideo','-'], { encoding: 'buffer' });
+  const { stdout } = await promisify(execFile)('ffmpeg', ['-v','error',...(/\.(png|jpe?g|webp|bmp|tiff|gif)$/i.test(file)?[]:['-ss',String(t)]),'-i',file,'-frames:v','1','-vf','scale=1:1','-pix_fmt','rgb24','-f','rawvideo','-'], { encoding: 'buffer' });
   return [...stdout];
 }
 async function samples(file: string) {
@@ -261,6 +261,43 @@ test('effect clips have real time boundaries, strength and speed in encoded vide
   const normal=await render({intensity:0});const moving=await render();const strong=await render({intensity:10});const slow=await render({speed:2});
   const baseline=await frame(normal.file,.8),actual=await frame(moving.file,.8);
   assert.notDeepEqual(actual,baseline);assert.notDeepEqual(await frame(strong.file,.8),actual);assert.notDeepEqual(await frame(slow.file,.8),actual);
+  const still=await exported({format:'png',frameTime:.8,durationSec:1.6,clips:[clip(asset,{duration:1.6}),effect]});
+  const stillRGB=(await promisify(execFile)('ffmpeg',['-v','error','-i',still.file,'-frames:v','1','-vf','scale=160:90','-pix_fmt','rgb24','-f','rawvideo','-'],{encoding:'buffer'})).stdout;
+  let snapshotDiff=0;for(let i=0;i<actual.length;i++)snapshotDiff+=Math.abs(actual[i]-stillRGB[i]);assert.ok(snapshotDiff/actual.length<4,`same frozen animation frame: ${snapshotDiff/actual.length}`);
   for(const t of [.16,1.4]){const a=await frame(normal.file,t),b=await frame(moving.file,t);let diff=0;for(let i=0;i<a.length;i++)diff+=Math.abs(a[i]-b[i]);assert.ok(diff/a.length<2,`effect must stop outside its range: ${diff/a.length}`);}
   for(const extra of [{intensity:11},{speed:-1},{speed:'fast'}])assert.equal((await api('/api/export',{durationSec:1.6,clips:[clip(asset),{...effect,...extra}]})).status,400);
+});
+const extraFormats:Record<string,string>={mkv:'h264',webm:'vp9',m4v:'h264',m4a:'aac',aac:'aac',flac:'flac',ogg:'vorbis',opus:'opus',aiff:'pcm_s16be',png:'png',jpg:'mjpeg',webp:'webp',bmp:'bmp',tiff:'tiff',gif:'gif'};
+for(const [format,codec] of Object.entries(extraFormats))test(`real ${format} export uses its advertised encoding`,async()=>{
+  const imageFormat=['png','jpg','webp','bmp','tiff','gif'].includes(format),audioFormat=['m4a','aac','flac','ogg','opus','aiff'].includes(format);
+  const {file,info}=await exported({format,durationSec:.4,frameTime:.16,clips:[clip(imageFormat?image:video,{duration:.4})]});
+  assert.equal(info.streams.find((s:any)=>s.codec_type===(audioFormat?'audio':'video')).codec_name,codec);
+  if(imageFormat){assert.ok((await pixel(file,0))[1]>180);assert.ok(!info.streams.some((s:any)=>s.codec_type==='audio'));}
+  else if(audioFormat){assert.ok(rms(await samples(file))>.04);assert.ok(!info.streams.some((s:any)=>s.codec_type==='video'));}
+});
+test('screenshots capture the cursor frame and image export requires an image track',async()=>{
+  assert.equal((await api('/api/export',{format:'png',durationSec:2,frameTime:1.2,clips:[clip(video)]})).status,400);
+  const result=await api('/api/screenshot',{durationSec:2,frameTime:1.2,resolution:'720p',clips:[clip(video)]});assert.equal(result.status,200,JSON.stringify(result.data));
+  const rgb=await pixel(path.join(temp,result.data.fileName),0);assert.ok(rgb[2]>220 && rgb[0]<30,`blue frame at cursor: ${rgb}`);
+  assert.equal((await api('/api/screenshot',{durationSec:2,frameTime:1.2,clips:[clip(image)]})).status,400);
+});
+test('waveforms are real source amplitudes and reflect the requested source interval',async()=>{
+  const query=(asset:any,offset:number,duration:number)=>`/api/waveform?${new URLSearchParams({mediaUrl:asset.fileUrl,offset:String(offset),duration:String(duration)})}`;
+  const tone=await api(query(video,0,1)),silence=await api(query(silent,0,1));assert.equal(tone.status,200);assert.ok(tone.data.peaks.length>500);assert.ok(Math.max(...tone.data.peaks)>.1);
+  // A video with no audio must report unavailable rather than draw a synthetic wave.
+  assert.equal(silence.status,500);
+  const changing=path.join(temp,'changing.wav');await ff(['-f','lavfi','-i',"aevalsrc='if(lt(t,0.5),0,0.5*sin(2*PI*440*t))':s=48000:d=1",changing]);const asset=await upload(changing);
+  const quiet=await api(query(asset,0,.4)),loud=await api(query(asset,.6,.4));assert.ok(Math.max(...quiet.data.peaks)<.001);assert.ok(Math.max(...loud.data.peaks)>.4);
+});
+test('caption generation preserves corrected text and timestamps as editable orange clips',async()=>{
+  const {captionClips,timelineSubtitles}=await import('../src/services/captionClips');
+  const draft=[{id:'s1',text:'Testo corretto',startTime:.4,endTime:1.2},{id:'s2',text:'Seconda frase',startTime:1.3,endTime:1.8}];
+  const generated=captionClips(draft,[clip(video)],[]);assert.equal(generated.tracks[0].type,'text');assert.equal(generated.tracks[0].name,'TESTO');
+  const text=generated.clips.filter(c=>c.type==='text');assert.equal(text[0].text,'Testo corretto');assert.equal(text[0].startTime,.4);assert.ok(Math.abs(text[0].duration-.8)<1e-6);assert.equal(text[0].color,'#f97316');
+  const updated=captionClips([{...draft[0],text:'Ancora corretto'}],generated.clips,generated.tracks);assert.equal(updated.clips.filter(c=>c.type==='text').length,1);assert.equal(updated.clips.find(c=>c.type==='text')!.id,text[0].id);
+  const captions=timelineSubtitles(text.map(c=>({...c,startTime:c.startTime+2})));assert.equal(captions[0].startTime,2.4);
+  const output=await exported({durationSec:2,clips:generated.clips});assert.ok(output.info.streams.some((s:any)=>s.codec_type==='video'));
+  async function yellow(t:number){const result=await promisify(execFile)('ffmpeg',['-v','error','-ss',String(t),'-i',output.file,'-frames:v','1','-pix_fmt','rgb24','-f','rawvideo','-'],{encoding:'buffer',maxBuffer:8*1024*1024});let count=0;for(let i=0;i<result.stdout.length;i+=3)if(result.stdout[i]>180 && result.stdout[i+1]>180 && result.stdout[i+2]<100)count++;return count;}
+  assert.equal(await yellow(.2),0);assert.ok(await yellow(.8)>100);assert.equal(await yellow(1.24),0);assert.ok(await yellow(1.5)>100);
+
 });

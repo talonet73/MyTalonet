@@ -1,3 +1,4 @@
+import {DraggableWindow} from './DraggableWindow';
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import type { TimelineClip } from '../types/editor';
@@ -10,8 +11,8 @@ export function EditingToolsPanel({ tab, selected, onClose, onUpdate, onCrossDis
 }) {
   const [transitionDuration,setTransitionDuration]=useState(.8);
   const visual=selected && ['video','image'].includes(selected.type);
-  return <section role="dialog" aria-label={`Pannello ${tab}`} className="absolute top-[105px] left-[300px] z-40 w-[360px] max-h-[calc(100vh-150px)] overflow-y-auto rounded-xl border border-slate-600 bg-[#111a2b] shadow-2xl text-sm">
-    <header className="sticky top-0 z-10 bg-[#111a2b] flex items-center justify-between p-3 border-b border-slate-700"><h2 className="font-bold text-cyan-300">{tab}</h2><button aria-label="Chiudi pannello" onClick={onClose} className="p-1 rounded hover:bg-slate-700"><X size={18}/></button></header>
+  return <DraggableWindow as="section" role="dialog" aria-label={`Pannello ${tab}`} className="absolute top-[105px] left-[300px] z-40 w-[360px] max-h-[calc(100vh-150px)] overflow-y-auto rounded-xl border border-slate-600 bg-[#111a2b] shadow-2xl text-sm">
+    <header data-window-handle className="sticky top-0 z-10 bg-[#111a2b] flex items-center justify-between p-3 border-b border-slate-700"><h2 className="font-bold text-cyan-300">{tab}</h2><button aria-label="Chiudi pannello" onClick={onClose} className="p-1 rounded hover:bg-slate-700"><X size={18}/></button></header>
     {tab==='Captions' ? <div className="h-[440px]">{children}</div> : <div className="p-4 space-y-4">
       <p className="text-xs text-slate-300">{tab==='Effects' ? 'Trascina un’anteprima sulla traccia EFFECTS, oppure cliccala per inserirla al cursore. Seleziona poi il mattoncino per regolare intensità e velocità.' : visual ? `Clip: ${selected.name}` : 'Seleziona una clip video o un’immagine nella timeline.'}</p>
       {tab==='Effects' && <>
@@ -30,5 +31,5 @@ export function EditingToolsPanel({ tab, selected, onClose, onUpdate, onCrossDis
         <button disabled={!visual} onClick={()=>onUpdate({adjustments:{}})} className="w-full p-2 rounded border border-slate-600 disabled:opacity-40">Ripristina regolazioni</button>
       </>}
     </div>}
-  </section>;
+  </DraggableWindow>;
 }

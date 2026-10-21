@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { EditingToolsPanel } from './components/EditingToolsPanel';
+import {captionClips,timelineSubtitles,textTrack} from './services/captionClips';
 import {BGRemoverPanel} from './components/BGRemoverPanel';
 import { applyCrossDissolve, makeEffectClip, type VisualEffect } from './services/visualSettings';
 import {allowedOnTrack, normalizeTrackAssignments} from './services/trackRules';
@@ -32,6 +33,7 @@ import { applyTimelineTool } from './services/timelineTools';
 import { useEditorSync } from './services/useEditorSync';
 
 const INITIAL_TRACKS: Track[] = [
+  {...textTrack(),id:"track_text_1"},
   {
     id: 'track_effects',
     name: 'EFFECTS',
@@ -88,6 +90,7 @@ export default function App() {
   const [clips, setClips] = useState<TimelineClip[]>(INITIAL_CLIPS);
   const [currentTime, setCurrentTime] = useState<number>(0); // 00:18 playhead matching screenshot
   const [totalDuration, setTotalDuration] = useState<number>(30); // 00:04:33:00 matching screenshot
+  const [screenshotBusy,setScreenshotBusy]=useState(false);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [selectedClipIds, setSelectedClipIds] = useState<string[]>([]);
@@ -314,7 +317,7 @@ export default function App() {
     if (!source.length) return;
     const ids = new Map(source.map(c => [c.id, crypto.randomUUID()]));
     const origin = source[0].startTime;
-    const copies = source.map(c => ({ ...c, id: ids.get(c.id)!, startTime: time + c.startTime - origin,
+    const copies = source.map(c => ({ ...c, ...(c.type==='text'?{captionId:undefined}:{}), id: ids.get(c.id)!, startTime: time + c.startTime - origin,
       linkedClipId: c.linkedClipId ? ids.get(c.linkedClipId) : undefined, isLinked: Boolean(c.linkedClipId && ids.has(c.linkedClipId)), name: `${c.name} (Copia)` }));
     const normalized=normalizeTrackAssignments([...clips,...copies],tracks);
     const updated=normalized.clips;setTracks(normalized.tracks);tracksRef.current=normalized.tracks;setClips(updated);clipsRef.current=updated;pushHistory(updated,normalized.tracks);
@@ -335,7 +338,7 @@ export default function App() {
   const handleSaveTalProject = () => {
     const projectData = {
       appName: 'TALEDIT',
-      version: '1.0.0',
+      version: '2.1.0',captionWorkflow:'timeline',
       savedAt: new Date().toISOString(),
       tracks,
       clips,
@@ -367,8 +370,11 @@ export default function App() {
       try {
         const content = evt.target?.result as string;
         const data = JSON.parse(content);
-        if (data.appName !== 'TALEDIT' || !Array.isArray(data.tracks) || !Array.isArray(data.clips) || data.tracks.length > 100 || data.clips.length > 200 || data.clips.some((c: any) => !c.id || !['video','audio','image','effect'].includes(c.type) || !Number.isFinite(c.startTime) || c.startTime < 0 || !Number.isFinite(c.duration) || c.duration <= 0)) throw new Error('Progetto TALEDIT non valido.');
-        const normalized=normalizeTrackAssignments(data.clips,data.tracks);data.clips=normalized.clips;data.tracks=normalized.tracks;
+        if (data.appName !== 'TALEDIT' || !Array.isArray(data.tracks) || !Array.isArray(data.clips) || data.tracks.length > 100 || data.clips.length > 2200 || data.clips.some((c: any) => !c.id || !['video','audio','image','effect','text'].includes(c.type) || !Number.isFinite(c.startTime) || c.startTime < 0 || !Number.isFinite(c.duration) || c.duration <= 0)) throw new Error('Progetto TALEDIT non valido.');
+        let normalized=normalizeTrackAssignments(data.clips,data.tracks);
+        if(!normalized.tracks.some(t=>t.type==='text'))normalized.tracks.push(textTrack());
+        if(data.captionWorkflow!=='timeline' && !data.clips.some((c:TimelineClip)=>c.type==='text') && data.subtitles?.length)normalized=captionClips(data.subtitles,normalized.clips,normalized.tracks,false,data.bilingualCaptions);
+        data.clips=normalized.clips;data.tracks=normalized.tracks;
         if (data.tracks) setTracks(data.tracks);
         if (data.clips) {
           setClips(data.clips);
@@ -785,7 +791,7 @@ export default function App() {
     const isAudio = type === 'audio';
     const isImage = type === 'image';
 
-    const headerBg = isEffects
+    const headerBg = type==='text' ? '#63300d' : isEffects
       ? '#35121b'
       : isVideo
       ? '#0f2942'
@@ -793,7 +799,7 @@ export default function App() {
       ? '#0d3324'
       : '#382a08';
 
-    const laneBg = isEffects
+    const laneBg = type==='text' ? '#301909' : isEffects
       ? '#1e141a'
       : isVideo
       ? '#111d2e'
@@ -899,6 +905,8 @@ export default function App() {
 
       {/* 1. Top Navigation Bar */}
       <TopNav
+        canScreenshot={!screenshotBusy && activeTimelineClips(clips,tracks).some(c=>c.type==='video' && currentTime>=c.startTime && currentTime<c.startTime+c.duration)}
+        onScreenshot={async()=>{setIsPlaying(false);setScreenshotBusy(true);try{const response=await fetch('/api/screenshot',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clips,tracks,subtitles:timelineSubtitles(activeTimelineClips(clips,tracks)),durationSec:Math.max(.04,...clips.map(c=>c.startTime+c.duration)),frameTime:currentTime,resolution:'1080p',aspectRatio})});const result=await response.json();if(!response.ok)throw new Error(result.error || 'Screenshot non riuscito.');const a=document.createElement('a');a.href=result.downloadUrl;a.download=result.fileName;a.click();}catch(error){setTrackConstraintWarning((error as Error).message);}finally{setScreenshotBusy(false);}}}
         hasSelection={clips.some(c=>c.id===selectedClipId || selectedClipIds.includes(c.id))}
         canUndo={historyCount>0}
         canRedo={historyIndexRef.current<historyRef.current.length-1}
@@ -935,7 +943,7 @@ export default function App() {
         onUpdate={updates => { if (!selectedClipId) return; const next=clips.map(c=>c.id===selectedClipId?{...c,...updates}:c);setClips(next);clipsRef.current=next;pushHistory(next); }}
         onAddEffect={type=>handleAddEffect(type)}
         onCrossDissolve={duration => { try { const next=applyCrossDissolve(clips,selectedClipId || '',duration);setClips(next);clipsRef.current=next;pushHistory(next); } catch(error) {setTrackConstraintWarning((error as Error).message);} }}>
-        <CaptionsPanel spokenLanguage={spokenLanguage} setSpokenLanguage={setSpokenLanguage} bilingualCaptions={bilingualCaptions} setBilingualCaptions={setBilingualCaptions} deleteCurrentCaptions={deleteCurrentCaptions} setDeleteCurrentCaptions={setDeleteCurrentCaptions} subtitles={subtitles} onGenerateCaptions={handleGenerateCaptions} onUpdateSubtitle={handleUpdateSubtitle} onDeleteSubtitle={handleDeleteSubtitle}/>
+        <CaptionsPanel hasGeneratedCaptions={clips.some(c=>Boolean(c.captionId))} spokenLanguage={spokenLanguage} setSpokenLanguage={setSpokenLanguage} bilingualCaptions={bilingualCaptions} setBilingualCaptions={setBilingualCaptions} deleteCurrentCaptions={deleteCurrentCaptions} setDeleteCurrentCaptions={setDeleteCurrentCaptions} subtitles={subtitles} onGenerateCaptions={handleGenerateCaptions} onInsertCaptions={()=>{try{const next=captionClips(subtitles,clips,tracks,deleteCurrentCaptions,bilingualCaptions);setClips(next.clips);clipsRef.current=next.clips;setTracks(next.tracks);tracksRef.current=next.tracks;pushHistory(next.clips,next.tracks);}catch(error){setTrackConstraintWarning((error as Error).message);}}} onUpdateSubtitle={handleUpdateSubtitle} onDeleteSubtitle={handleDeleteSubtitle}/>
       </EditingToolsPanel>}
 
       {/* 2. Main Middle Workspace: Header + 4 Resizable Panels */}
@@ -996,7 +1004,7 @@ export default function App() {
               aspectRatio={aspectRatio}
               setAspectRatio={setAspectRatio}
               clips={activeTimelineClips(clips, tracks)}
-              subtitles={subtitles.map(s => bilingualCaptions && s.translation ? { ...s, text: `${s.text}\n${s.translation}` } : s)}
+              subtitles={timelineSubtitles(activeTimelineClips(clips,tracks))}
               isMuted={isMutedMaster}
               onToggleMute={() => setIsMutedMaster(m => !m)}
             />
@@ -1054,6 +1062,7 @@ export default function App() {
           onUpdateClip={handleUpdateClip}
           onToggleTrackSolo={handleToggleTrackSolo}
           onToggleTrackMute={handleToggleTrackMute}
+          onResizeTrack={(id,height)=>{const next=tracks.map(t=>t.id===id?{...t,height}:t);setTracks(next);tracksRef.current=next;}}
           onDeleteTrack={handleDeleteTrack}
           onAddTrack={handleAddTrack}
           markers={markers}
@@ -1085,8 +1094,9 @@ export default function App() {
         onClose={() => setIsExportModalOpen(false)}
         clips={clips}
         tracks={tracks}
-        subtitles={subtitles.map(s => bilingualCaptions && s.translation ? { ...s, text: `${s.text}\n${s.translation}` } : s)}
+        subtitles={timelineSubtitles(activeTimelineClips(clips,tracks))}
         aspectRatio={aspectRatio}
+        currentTime={currentTime}
       />
 
       {/* Floating Track Constraint Warning Toast */}

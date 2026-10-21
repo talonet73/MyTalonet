@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  FolderOpen,
+  Camera, FolderOpen,
   Save,
   PlusSquare,
   Share2,
@@ -39,6 +39,8 @@ interface TopNavProps {
   onImport: () => void;
   onSave: () => void;
   onExport: () => void;
+  onScreenshot:()=>void;
+  canScreenshot:boolean;
   onAddMarker: () => void;
   markerCount?: number;
   activeTab: string;
@@ -63,7 +65,7 @@ export const TopNav: React.FC<TopNavProps> = ({
   onOpenProject,
   onImport,
   onSave,
-  onExport,
+  onExport,onScreenshot,canScreenshot,
   onAddMarker,
   markerCount = 0,
   activeTab,
@@ -198,6 +200,7 @@ export const TopNav: React.FC<TopNavProps> = ({
             <span className="text-[10px]">Esporta</span>
           </button>
 
+          <button onClick={onScreenshot} disabled={!canScreenshot} title="Screenshot del fotogramma al cursore" className="flex flex-col items-center px-2 py-1 rounded hover:bg-slate-700 disabled:opacity-40"><Camera className="w-4 h-4 mb-0.5"/><span className="text-[10px]">Screenshot</span></button>
           <div className="h-6 w-[1px] bg-[#1e293b] mx-1" />
 
           <button

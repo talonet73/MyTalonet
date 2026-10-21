@@ -52,6 +52,7 @@ export interface ImageClipData extends Partial<VisualSettings> {
 }
 
 export interface SubtitleData {
+  row?:number;transparency?:number;fadeIn?:number;fadeOut?:number;
   text: string;
   startTime: number;
   endTime: number;
@@ -209,13 +210,13 @@ export class PlaybackEngine {
       if(effect.effectType==='blur')ctx.filter=`blur(${height/90*effectAmount(effect)}px)`;
       ctx.translate(width/2-motion.x*width,height/2-motion.y*height);ctx.scale(motion.zoom,motion.zoom);ctx.drawImage(frame,-width/2,-height/2);ctx.restore();
     }
-    const subtitle=subtitles.find(s=>time>=s.startTime && time<s.endTime);
-    if(subtitle) {
+    for(const subtitle of subtitles.filter(s=>time>=s.startTime && time<s.endTime)) {
+      ctx.save();ctx.globalAlpha=clipAlpha({...subtitle,duration:subtitle.endTime-subtitle.startTime},time-subtitle.startTime);
       const font=Math.round(height/24),lines=subtitle.text.split('\n');
       ctx.font=`bold ${font}px sans-serif`;ctx.textAlign='center';
-      const w=Math.min(width-20,Math.max(...lines.map(line=>ctx.measureText(line).width))+16),h=lines.length*(font+4);
-      ctx.fillStyle='#000b';ctx.fillRect((width-w)/2,height-h-24,w,h+10);ctx.fillStyle='yellow';
-      lines.forEach((line,i)=>ctx.fillText(line,width/2,height-h-14+(i+1)*(font+4),width-24));
+      const w=Math.min(width-20,Math.max(...lines.map(line=>ctx.measureText(line).width))+16),h=lines.length*(font+4),row=(subtitle.row||0)*font*2;
+      ctx.fillStyle='#000b';ctx.fillRect((width-w)/2,height-h-24-row,w,h+10);ctx.fillStyle='yellow';
+      lines.forEach((line,i)=>ctx.fillText(line,width/2,height-h-14-row+(i+1)*(font+4),width-24));ctx.restore();
     }
   }
   public pauseAll() { this.videoCache.forEach(v => v.pause()); this.audioCache.forEach(a => a.pause()); }
