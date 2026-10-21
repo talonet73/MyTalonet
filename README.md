@@ -4,6 +4,8 @@ Editor video locale con React, Express, FFmpeg e strumenti MCP per Claude e Chat
 
 ## Avvio
 
+Su Windows: [istruzioni con doppio clic](APRI-SU-WINDOWS.md), con i file `1-PREPARA-TALEDIT.cmd` e `2-AVVIA-TALEDIT.cmd`. La procedura Windows e predisposta ma non e stata eseguita su una macchina Windows; le prove browser descritte sotto sono state eseguite nell’ambiente Linux.
+
 Requisiti: Node.js >=22.12, Python 3, FFmpeg e ffprobe nel PATH.
 
 ```bash
