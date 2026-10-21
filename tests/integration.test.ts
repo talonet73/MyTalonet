@@ -113,7 +113,7 @@ test('missing media and invalid exports fail explicitly instead of producing bla
   }
 });
 test('all advertised effects can be encoded', async () => {
-  for(const effectType of ['blur','glow','vintage','cinematic','glitch','camera_shake','dissolvenza']) {
+  for(const effectType of ['blur','glow','vintage','cinematic','glitch','camera_shake','zoom_in','zoom_out','monochrome','dissolvenza']) {
     await exported({durationSec:1,clips:[clip(video),{id:'e',type:'effect',effectType,startTime:0,duration:1,offset:0,fadeIn:.2,fadeOut:.2}]});
   }
 });
@@ -167,12 +167,12 @@ test('caption readiness accurately reports missing model and does not invent tex
   if(!data.ready){const response=await api('/api/captions',{clips:[clip(video)],language:'Italian',durationSec:2});assert.equal(response.status,503);assert.match(response.data.error,/Whisper non pronto/);}
 });
 
-test('images can enter image/video tracks and cross-dissolve blends colors without a black dip',async()=>{
+test('images enter only image tracks and cross-dissolve blends colors without a black dip',async()=>{
   const {applyTimelineTool}=await import('../src/services/timelineTools');
   const {applyCrossDissolve}=await import('../src/services/visualSettings');
   const state:any={clips:[],tracks:[{id:'image-track',type:'image'},{id:'video-track',type:'video'},{id:'effect-track',type:'effect'}],mediaAssets:[image],subtitles:[],currentTime:0,selectedClipId:null,aspectRatio:'16:9'};
-  for(const trackId of ['image-track','video-track'])assert.equal(applyTimelineTool(state,'add_clip',{assetId:image.id,trackId,timeSeconds:0}).clips[0].type,'image');
-  assert.throws(()=>applyTimelineTool(state,'add_clip',{assetId:image.id,trackId:'effect-track',timeSeconds:0}));
+  for(const trackId of ['image-track'])assert.equal(applyTimelineTool(state,'add_clip',{assetId:image.id,trackId,timeSeconds:0}).clips[0].type,'image');
+  for(const trackId of ['effect-track','video-track'])assert.throws(()=>applyTimelineTool(state,'add_clip',{assetId:image.id,trackId,timeSeconds:0}));
   // red first second and blue second second are cut from the real video fixture.
   const sequence=[clip(video,{duration:1,offset:0}),clip(video,{id:'second',duration:1,offset:1,startTime:1})];
   const mixed=applyCrossDissolve(sequence,'second',.5);
@@ -194,7 +194,7 @@ test('all catalog effects change actual exported frames, including progressive z
   async function frame(file:string,t:number){const r=await promisify(execFile)('ffmpeg',['-v','error','-ss',String(t),'-i',file,'-frames:v','1','-vf','scale=160:90','-pix_fmt','rgb24','-f','rawvideo','-'],{encoding:'buffer'});return r.stdout;}
   const normal=await exported({durationSec:1,clips:[clip(asset,{duration:1})]});const baseline=await frame(normal.file,.8);
   for(const effect of EFFECTS){
-    const result=await exported({durationSec:1,clips:[clip(asset,{duration:1,effects:[effect.type]})]});
+    const result=await exported({durationSec:1,clips:[clip(asset,{duration:1}),{id:'fx',name:effect.label,type:'effect',effectType:effect.type,trackId:'fx',startTime:0,duration:1,offset:0,intensity:5,speed:5,fadeIn:0,fadeOut:0}]});
     const actual=await frame(result.file,.8);
     let diff=0;for(let i=0;i<actual.length;i++)diff+=Math.abs(actual[i]-baseline[i]);
     assert.ok(diff/actual.length>.5,`${effect.type} must visibly change output, got mean diff ${diff/actual.length}`);
@@ -237,4 +237,30 @@ test('unlinking prevents MCP delete/cut from modifying the formerly linked audio
   const state:any={clips:[clip(video,{id:'v',linkedClipId:'a',isLinked:false}),clip(video,{id:'a',type:'audio',linkedClipId:'v',isLinked:false})],tracks:[],mediaAssets:[],subtitles:[],currentTime:1,selectedClipId:'v',aspectRatio:'16:9'};
   assert.deepEqual(applyTimelineTool(state,'delete_clip',{}).clips.map(c=>c.id),['a']);
   const cut=applyTimelineTool(state,'cut_clip_at_time',{timeSeconds:1});assert.equal(cut.clips.find(c=>c.id==='a')?.duration,2);assert.equal(cut.clips.length,3);
+});
+
+test('each media is restricted to its own track and old projects are repaired',async()=>{
+  const {applyTimelineTool}=await import('../src/services/timelineTools');
+  const {normalizeTrackAssignments}=await import('../src/services/trackRules');
+  const tracks=['image','video','audio','effect'].map(type=>({id:type,type}));
+  for(const type of ['image','video','audio'])for(const track of tracks){
+    const asset={...image,id:type,type,hasAudio:false};const state:any={clips:[],tracks,mediaAssets:[asset],subtitles:[],currentTime:0};
+    const add=()=>applyTimelineTool(state,'add_clip',{assetId:type,trackId:track.id,timeSeconds:0});
+    if(track.type===type)assert.equal(add().clips[0].trackId,type);else assert.throws(add);
+  }
+  const migrated=normalizeTrackAssignments([clip(image,{trackId:'video'}),clip(video,{id:'video',trackId:'audio'})],tracks as any);
+  assert.equal(migrated.clips[0].trackId,'image');assert.equal(migrated.clips[1].trackId,'video');
+});
+test('effect clips have real time boundaries, strength and speed in encoded video',async()=>{
+  const {makeEffectClip}=await import('../src/services/visualSettings');
+  const source=path.join(temp,'fx-pattern.png');await ff(['-f','lavfi','-i','testsrc2=s=320x180:r=25','-frames:v','1','-threads','1',source]);const asset=await upload(source);
+  const effect=makeEffectClip('zoom_in','fx',.4);effect.duration=.8;effect.effectSpan=.8;
+  assert.equal(effect.intensity,5);assert.equal(effect.speed,5);
+  async function frame(file:string,t:number){return (await promisify(execFile)('ffmpeg',['-v','error','-ss',String(t),'-i',file,'-frames:v','1','-vf','scale=160:90','-pix_fmt','rgb24','-f','rawvideo','-'],{encoding:'buffer'})).stdout;}
+  const render=async(extra:any={})=>exported({durationSec:1.6,clips:[clip(asset,{duration:1.6}),{...effect,...extra}]});
+  const normal=await render({intensity:0});const moving=await render();const strong=await render({intensity:10});const slow=await render({speed:2});
+  const baseline=await frame(normal.file,.8),actual=await frame(moving.file,.8);
+  assert.notDeepEqual(actual,baseline);assert.notDeepEqual(await frame(strong.file,.8),actual);assert.notDeepEqual(await frame(slow.file,.8),actual);
+  for(const t of [.16,1.4]){const a=await frame(normal.file,t),b=await frame(moving.file,t);let diff=0;for(let i=0;i<a.length;i++)diff+=Math.abs(a[i]-b[i]);assert.ok(diff/a.length<2,`effect must stop outside its range: ${diff/a.length}`);}
+  for(const extra of [{intensity:11},{speed:-1},{speed:'fast'}])assert.equal((await api('/api/export',{durationSec:1.6,clips:[clip(asset),{...effect,...extra}]})).status,400);
 });

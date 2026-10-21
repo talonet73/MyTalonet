@@ -61,6 +61,7 @@ export async function exportMedia(body: any) {
   const clips = activeClips(body.clips, body.tracks);
   for (const clip of clips) {
     number(clip.startTime, 0, 0, 86400); number(clip.duration, 0, 0.001, 86400); number(clip.offset, 0, 0, 86400);
+    number(clip.intensity,5,0,10);number(clip.speed,5,0,10);number(clip.effectSpan,clip.duration,.001,86400);
     number(clip.volumeDb, 0, -60, 12); number(clip.transparency, 100, 0, 100);
     number(clip.fadeIn, 0, 0, 600); number(clip.fadeOut, 0, 0, 600);
     if (clip.effects !== undefined && (!Array.isArray(clip.effects) || clip.effects.length > 12 || clip.effects.some((e:string) => ![...EFFECTS.map(e=>e.type),'glitch'].includes(e as any)))) throw new InputError('Effetto visivo non valido.');
@@ -113,6 +114,8 @@ export async function exportMedia(body: any) {
     const idx = input++;
     if (clip.type === 'image') args.push('-loop', '1', '-framerate', '25');
     else args.push('-ss', String(clip.offset || 0));
+    // FFmpeg's native VP9 decoder discards WebM alpha. libvpx preserves it.
+    if(visual && clip.info.streams.some((s:any)=>s.codec_name==='vp9' && String(s.tags?.alpha_mode ?? s.tags?.ALPHA_MODE)==='1'))args.push('-c:v','libvpx-vp9');
     args.push('-t', String(Math.min(clip.duration, duration - clip.startTime)), '-i', clip.file);
     if (visual) {
       const v = `v${idx}`, next = `layer${idx}`;
@@ -130,20 +133,24 @@ export async function exportMedia(body: any) {
   }
   if (!audioOnly) {
     for (const [i, effect] of clips.filter(c => c.type === 'effect').entries()) {
-      const next = `fx${i}`, enable = `enable='gte(t,${effect.startTime})*lt(t,${effect.startTime + effect.duration})'`;
-      const intensity = `max(0,min(1,min((t-${effect.startTime})/${Math.max(.04, effect.fadeIn)},(${effect.startTime + effect.duration}-t)/${Math.max(.04, effect.fadeOut)})))`;
-      let filter: string;
-      switch (effect.effectType) {
-        case 'blur': filter = `boxblur=8:1:${enable}`; break;
-        case 'glow': filter = `eq=brightness=0.08:saturation=1.2:${enable}`; break;
-        case 'vintage': filter = `eq=saturation=0.4:contrast=1.1:${enable}`; break;
-        case 'cinematic': filter = `eq=contrast=1.15:saturation=0.8:${enable}`; break;
-        case 'glitch': filter = `rgbashift=rh=6:bh=-6:${enable}`; break;
-        case 'camera_shake': filter = `crop=w=iw-24:h=ih-24:x='12+10*sin(t*23)*(${intensity})':y='12+10*cos(t*19)*(${intensity})',scale=${width}:${height}`; break;
-        case 'dissolvenza': filter = `fade=t=in:st=${effect.startTime}:d=${Math.max(.04, effect.fadeIn)},fade=t=out:st=${Math.max(effect.startTime, effect.startTime + effect.duration - effect.fadeOut)}:d=${Math.max(.04, effect.fadeOut)}`; break;
-        default: throw new InputError('Effetto non supportato.');
-      }
-      filters.push(`[${layer}]${filter}[${next}]`); layer = next;
+      if(![...EFFECTS.map(e=>e.type),'dissolvenza'].includes(effect.effectType as any))throw new InputError('Effetto non supportato.');
+      if(effect.intensity===0)continue;
+      const next=`fx${i}`,original=`fxorig${i}`,work=`fxwork${i}`,processed=`fxprocessed${i}`;
+      filters.push(`[${layer}]split[${original}][${work}]`);
+      const elapsed=`(T-${effect.startTime})`, clock=`((${elapsed}+${effect.offset||0})*${(effect.speed??5)/5})`;
+      const fade=`max(0,min(1,min(${effect.fadeIn?`${elapsed}/${effect.fadeIn}`:'1'},${effect.fadeOut?`(${effect.startTime+effect.duration}-T)/${effect.fadeOut}`:'1'})))`;
+      const moving=['camera_shake','zoom_in','zoom_out'].includes(effect.effectType!);
+      const pulse=moving?'1':`(.9+.1*cos(${clock}*6.28318530718))`;
+      const weight=effect.effectType==='dissolvenza'?`1-(${fade})*${(effect.intensity??5)/5}`:`(${fade})*${pulse}`;
+      const chain=effect.effectType==='dissolvenza'?'colorchannelmixer=rr=0:gg=0:bb=0':visualFilters({...effect,effects:[effect.effectType as any],fadeIn:0,fadeOut:0},width,height,true);
+      // Evaluate time envelopes on a tiny mask, then scale it. Evaluating the
+      // same expression for every output pixel makes ordinary effects needlessly slow.
+      const maskInput=input++;
+      args.push('-f','lavfi','-i',`color=c=white:s=16x16:r=25:d=${duration}`);
+      filters.push(`[${maskInput}:v]format=gray,geq=lum='255*max(0,min(1,${weight}))',scale=${width}:${height}[fxmask${i}]`);
+      filters.push(`[${work}]${chain},format=rgb24[${processed}]`);
+      filters.push(`[${processed}][fxmask${i}]alphamerge[fxalpha${i}]`);
+      filters.push(`[${original}][fxalpha${i}]overlay=eof_action=pass:repeatlast=0:enable='gte(t,${effect.startTime})*lt(t,${effect.startTime+effect.duration})'[${next}]`);layer=next;
     }
   }
   if (audioTags.length) {

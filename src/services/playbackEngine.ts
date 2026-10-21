@@ -1,4 +1,4 @@
-import { adjustPixels, clipAlpha, colorSettings, motionAt, type VisualSettings } from './visualSettings';
+import { adjustPixels, clipAlpha, colorSettings, motionAt, effectAmount, effectMix, type VisualSettings } from './visualSettings';
 /**
  * Real Media & Canvas Rendering Engine for TALEDIT
  * Supports playback of real imported HTML5 video, audio and images,
@@ -31,7 +31,7 @@ export interface AudioClipData {
   fadeOut?: number;
 }
 
-export interface EffectClipData {
+export interface EffectClipData extends Partial<VisualSettings> {
   id: string;
   name: string;
   fadeIn: number;
@@ -159,7 +159,7 @@ export class PlaybackEngine {
       if(frame.width!==width || frame.height!==height){frame.width=width;frame.height=height;}
       const target=frame.getContext('2d',{willReadFrequently:true})!;
       target.clearRect(0,0,width,height);
-      const settings:VisualSettings={...clip,effects:[...(clip.effects||[]),...global.filter(e=>e.effectType!=='dissolvenza').map(e=>e.effectType as any)]};
+      const settings:VisualSettings=clip;
       const ratio=Math.min(width/w,height/h);
       target.drawImage(source,(width-w*ratio)/2,(height-h*ratio)/2,w*ratio,h*ratio);
       const color=colorSettings(settings);
@@ -182,13 +182,32 @@ export class PlaybackEngine {
         }
         target.putImageData(pixels,0,0);
       }
-      const elapsed=time-clip.startTime,motion=motionAt(settings,elapsed);
+      const elapsed=time-clip.startTime,motion=motionAt({...settings,offset:0},elapsed);
       ctx.save();
       ctx.globalAlpha=clipAlpha(settings,elapsed);
-      for(const effect of global.filter(e=>e.effectType==='dissolvenza'))ctx.globalAlpha*=clipAlpha({...effect,transparency:100},time-effect.startTime);
-      if(settings.effects?.includes('blur'))ctx.filter=`blur(${height/90}px)`;
+      if(settings.effects?.includes('blur'))ctx.filter=`blur(${height/90*effectAmount(settings)}px)`;
       ctx.translate(width/2-motion.x*width,height/2-motion.y*height);ctx.scale(motion.zoom,motion.zoom);
       ctx.drawImage(frame,-width/2,-height/2);ctx.restore();
+    }
+    for(const effect of global) {
+      if(effect.intensity===0)continue;
+      const elapsed=time-effect.startTime;
+      if(effect.effectType==='dissolvenza') {ctx.save();ctx.globalAlpha=1-effectMix(effect,elapsed,effect.effectType);ctx.fillStyle='black';ctx.fillRect(0,0,width,height);ctx.restore();continue;}
+      const settings:VisualSettings={...effect,effects:[effect.effectType as any]};
+      let frame=this.frameCache.get('effect:'+effect.id);
+      if(!frame){frame=document.createElement('canvas');this.frameCache.set('effect:'+effect.id,frame);}
+      frame.width=width;frame.height=height;
+      const target=frame.getContext('2d',{willReadFrequently:true})!;target.drawImage(canvas,0,0);
+      const pixels=target.getImageData(0,0,width,height);adjustPixels(pixels.data,settings);
+      if(effect.effectType==='glitch') {
+        const original=new Uint8ClampedArray(pixels.data),shift=Math.round(width*.004*effectAmount(effect));
+        for(let y=0;y<height;y++)for(let x=0;x<width;x++){const i=(y*width+x)*4;pixels.data[i]=original[(y*width+Math.max(0,x-shift))*4];pixels.data[i+2]=original[(y*width+Math.min(width-1,x+shift))*4+2];}
+      }
+      target.putImageData(pixels,0,0);
+      const motion=motionAt(settings,elapsed);
+      ctx.save();ctx.globalAlpha=effectMix(effect,elapsed,effect.effectType);
+      if(effect.effectType==='blur')ctx.filter=`blur(${height/90*effectAmount(effect)}px)`;
+      ctx.translate(width/2-motion.x*width,height/2-motion.y*height);ctx.scale(motion.zoom,motion.zoom);ctx.drawImage(frame,-width/2,-height/2);ctx.restore();
     }
     const subtitle=subtitles.find(s=>time>=s.startTime && time<s.endTime);
     if(subtitle) {

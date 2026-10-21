@@ -97,7 +97,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         fadeOut: c.fadeOut,
         startTime: c.startTime,
         duration: c.duration,
-        effectType: c.effectType,
+        intensity:c.intensity,speed:c.speed,offset:c.offset,effectSpan:c.effectSpan,
+      effectType: c.effectType,
       }));
 
     const imageClips = clips

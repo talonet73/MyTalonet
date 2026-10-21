@@ -94,6 +94,7 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
       fadeOut: c.fadeOut,
       startTime: c.startTime,
       duration: c.duration,
+      intensity:c.intensity,speed:c.speed,offset:c.offset,effectSpan:c.effectSpan,
       effectType: c.effectType
     }));
 
@@ -173,7 +174,7 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
       {/* Video Screen Area */}
       <div className="flex-1 flex items-center justify-center p-2 bg-[#0a0d14] relative overflow-hidden">
         <div className={`relative ${aspectClass} w-full max-w-full flex items-center justify-center shadow-2xl rounded border border-[#1e293b] bg-black overflow-hidden`}>
-          <canvas
+          <canvas data-testid="player-canvas"
             ref={canvasRef}
             width={aspectRatio === '9:16' ? 360 : aspectRatio === '1:1' ? 360 : aspectRatio === '4:3' ? 480 : 640}
             height={aspectRatio === '9:16' ? 640 : 360}

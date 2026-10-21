@@ -6,7 +6,7 @@ Editor video locale con React, Express, FFmpeg e strumenti MCP per Claude e Chat
 
 Su Windows: [istruzioni con doppio clic](APRI-SU-WINDOWS.md), con i file `1-PREPARA-TALEDIT.cmd` e `2-AVVIA-TALEDIT.cmd`. La procedura Windows e predisposta ma non e stata eseguita su una macchina Windows; le prove browser descritte sotto sono state eseguite nell’ambiente Linux.
 
-Requisiti: Node.js >=22.12, Python 3, FFmpeg e ffprobe nel PATH.
+Requisiti: Node.js >=22.12, Python 3.12, FFmpeg e ffprobe nel PATH.
 
 ```bash
 npm ci
@@ -22,20 +22,21 @@ npm run build
 NODE_ENV=production npm start
 ```
 
-Importa i media con **Importa** nella barra superiore o **Import** nello stage. I file sono verificati con ffprobe e salvati con nomi univoci in `media_downloads/` (oppure `MEDIA_DIR`). Doppio clic sul media per aggiungerlo alla timeline al cursore. I video con audio creano una coppia video/audio collegata. Taglio, spostamento, copia e duplicazione mantengono la coppia sincronizzata. Le immagini entrano nella traccia IMMAGINI o in una traccia video, anche tramite trascinamento. Le tracce audio rimangono compatibili con le immagini dei progetti precedenti.
+Importa i media con **Importa** nella barra superiore o **Import** nello stage. I file sono verificati con ffprobe e salvati con nomi univoci in `media_downloads/` (oppure `MEDIA_DIR`). Doppio clic sul media per aggiungerlo alla timeline al cursore. I video con audio creano una coppia video/audio collegata. Taglio, spostamento, copia e duplicazione mantengono la coppia sincronizzata. Ogni tipo entra soltanto nella propria traccia: IMMAGINI, VIDEO, AUDIO, EFFECTS. Aprendo vecchi progetti, i contenuti fuori posto vengono spostati nella traccia corretta, creandola se manca.
 
 I progetti `.tal` conservano timeline, proporzioni e riferimenti ai file sul server; non incorporano i media. Conserva la cartella media insieme ai progetti. Usa **Salva** prima di chiudere: la timeline condivisa MCP è in memoria e non sopravvive al riavvio del server. Le vecchie URL `blob:` scadute richiedono la reimportazione del file originale.
 
 ## Strumenti di montaggio
 
-Seleziona prima una clip nella timeline. I quattro pulsanti aprono pannelli reali, richiudibili con la X o cliccando nuovamente il pulsante.
+I cinque pulsanti aprono pannelli reali, richiudibili con la X o cliccando nuovamente il pulsante. Transitions, Adjustment e BG Remover operano sulla clip selezionata; Effects si può aprire anche senza selezione.
 
-- **Effects**: Camera a mano, Zoom in, Zoom out, Luce morbida, Vintage, Cinema, Bianco e nero, Sfocatura. Puoi combinare gli effetti; Zoom in e Zoom out si escludono. Gli zoom cambiano durante la riproduzione. **Rimuovi effetti** ripristina la clip.
+- **Effects**: nove anteprime della scena campione, calcolate con lo stesso motore del player: Camera a mano, Zoom in, Zoom out, Luce morbida, Vintage, Cinema, Bianco e nero, Sfocatura e Glitch. Trascina l’anteprima soltanto sulla traccia EFFECTS; il clic la inserisce al cursore. Ogni mattoncino ha maniglie di durata, taglio, copia/incolla e cronologia. Cliccalo per aprire i controlli **Intensità** e **Velocità**, entrambi da 0 a 10, predefiniti a 5. Intensità 0 disattiva l’effetto; Velocità 0 ferma il movimento o la pulsazione. Per gli effetti di colore/sfocatura la velocità regola il ritmo di una lieve pulsazione. Gli effetti agiscono sull’immagine composta solo nel proprio intervallo; più mattoncini sovrapposti si combinano.
 - **Transitions**: dissolvenza in entrata/uscita, con durata scelta, oppure dissolvenza incrociata. Per quest’ultima accosta due clip sulla stessa traccia e seleziona la seconda: le clip vengono sovrapposte e quelle successive della stessa traccia, con l’audio collegato, vengono anticipate. L’audio viene sfumato e il video entrante si sovrappone a quello uscente senza un passaggio intermedio al nero.
 - **Captions**: apre il pannello per scegliere la lingua, generare sottotitoli reali con Whisper, correggere i testi ed eliminare righe. La traduzione disponibile è verso l’inglese.
 - **Adjustment**: luminosità, contrasto, saturazione, esposizione, temperatura, tinta e nitidezza della clip selezionata. **Ripristina regolazioni** riporta i valori iniziali.
+- **BG Remover**: rimuove lo sfondo della clip video o immagine selezionata, conserva un soggetto principale e genera un nuovo file nello stage. La clip viene sostituita se il contenuto selezionato non è cambiato nel frattempo; **Annulla** ripristina la precedente.
 
-Effetti, regolazioni e dissolvenze sono conservati nei progetti `.tal` e applicati sia all’anteprima sia all’esportazione. Le impostazioni operano sulla singola clip selezionata; gli effetti globali dei progetti precedenti rimangono supportati. L’anteprima usa una risoluzione ridotta, l’export quella scelta.
+Effetti, regolazioni e dissolvenze sono conservati nei progetti `.tal` e applicati sia all’anteprima sia all’esportazione. Le regolazioni operano sulla singola clip selezionata; i nuovi effetti sono mattoncini sulla propria traccia. Gli effetti incorporati nelle clip dei progetti precedenti rimangono supportati. L’anteprima usa una risoluzione ridotta, l’export quella scelta.
 
 I comandi non disponibili (ad esempio Cestino senza selezione o Incolla prima di Copia) sono disabilitati. I menu File/Edit e i comandi principali usano le stesse operazioni effettive. Annulla/Ripristina conserva clip e tracce: eliminare una traccia e poi annullare non lascia clip senza traccia. Il taglio da sinistra aggiorna anche il punto della sorgente e l’audio collegato.
 
@@ -94,10 +95,20 @@ npm run test:e2e
 npm run test:whisper
 ```
 
-`npm test` include una trascrizione reale via API: richiede il modello installato e fallisce se mancante. Verifica taglio della sorgente a 2 secondi, inserimento a 3 secondi, tracce mute e timestamp ordinati. I test API generano media di riferimento e analizzano gli output con FFmpeg/ffprobe: fotogrammi colorati, frequenza e livello audio, durate, offset, sovrapposizioni, mute/solo, silenzio, effetti, contenitori e errori. I due trasporti MCP sono provati con l’SDK ufficiale. I test browser usano Chromium di sistema (`CHROMIUM_PATH` configurabile), importano file reali e verificano l’export scaricato. La prova UI YouTube usa risposte controllate ed è distinta da un download reale. `test:whisper` usa parlato noto e silenzio: fallisce se il modello manca, senza skip o trascrizioni simulate.
+`npm test` include una trascrizione reale e la segmentazione dello sfondo via API: richiede entrambi i modelli installati (`scripts/setup-whisper.sh` e `scripts/setup-bg.sh`) e fallisce se mancanti. Verifica taglio della sorgente a 2 secondi, inserimento a 3 secondi, tracce mute e timestamp ordinati. I test API generano media di riferimento e analizzano gli output con FFmpeg/ffprobe: fotogrammi colorati, frequenza e livello audio, durate, offset, sovrapposizioni, mute/solo, silenzio, effetti, contenitori e errori. I due trasporti MCP sono provati con l’SDK ufficiale. I test browser usano Chromium di sistema (`CHROMIUM_PATH` configurabile), importano file reali e verificano l’export scaricato. La prova UI YouTube usa risposte controllate ed è distinta da un download reale. `test:whisper` usa parlato noto e silenzio: fallisce se il modello manca, senza skip o trascrizioni simulate.
 
 `tests/fixtures/jfk.wav` proviene dal repository ufficiale whisper.cpp; fonte e hash sono in `tests/fixtures/README.md`.
 
 Risultati delle verifiche e diagnosi dei domini: [docs/verification.md](docs/verification.md).
 
 Controllo della barra e matrice dei pulsanti verificati: [docs/toolbar-verification.md](docs/toolbar-verification.md).
+
+## Rimozione sfondo gratuita
+
+[rembg](https://github.com/danielgatis/rembg), licenza MIT, con modello U2NetP e CPU. Non è un servizio GitHub ospitato: è software gratuito eseguito localmente. Il download ufficiale del modello pesa circa 4,6 MB e mantiene il controllo di checksum del progetto. I file dell’utente non vengono inviati a servizi di segmentazione. Non sono usati modelli predefiniti con licenze commerciali diverse.
+
+Su Linux, prepara una volta con `bash scripts/setup-bg.sh`; su Windows `2-AVVIA-TALEDIT.cmd` prepara automaticamente un ambiente Python separato da Whisper. Un errore nella preparazione BG non impedisce l’avvio del resto dell’editor: il pannello indica che il modello non è pronto. Configurazioni locali: `BG_PYTHON` e `BG_MODEL_DIR`. Dipendenze bloccate in `scripts/requirements-bg.lock`; non modificano PyAV/Whisper.
+
+Il modello stima la maschera e conserva la componente rilevante vicina al centro; sui video usa anche la posizione precedente. Non identifica semanticamente una persona specifica e non garantisce bordi perfetti su capelli, trasparenze, soggetti piccoli o movimenti difficili. Le immagini diventano PNG RGBA; i video WebM VP9 con alpha a 25 fps, audio Opus e dimensioni originali (eventuale padding di un pixel per dimensioni pari). L’export MP4 compone la trasparenza sul resto del montaggio. Si elabora solo l’intervallo selezionato: l’audio collegato mantiene la sorgente originale e il suo offset anche nei tagli successivi. Puoi annullare il lavoro dal pannello; chiuderlo lascia proseguire l’elaborazione.
+
+Limiti: un lavoro BG per volta, massimo 10 minuti per clip, 33 megapixel per fotogramma e 30 minuti di elaborazione. È un’elaborazione offline su CPU, non un effetto in tempo reale. Il primo download richiede PyPI, `github.com` e `release-assets.githubusercontent.com`.

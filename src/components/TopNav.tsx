@@ -74,7 +74,7 @@ export const TopNav: React.FC<TopNavProps> = ({
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
 
   const menuItems = ['File', 'Edit', 'View', 'Help'];
-  const tabs = ['Effects', 'Transitions', 'Captions', 'Adjustment'];
+  const tabs = ['Effects', 'Transitions', 'Captions', 'Adjustment', 'BG Remover'];
 
   return (
     <div className="bg-[#0b0f19] border-b border-[#1e293b] select-none text-[#e2e8f0] text-xs">

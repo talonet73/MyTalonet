@@ -9,6 +9,7 @@ import { downloadsDir, describeMedia, exportMedia, InputError, run } from './ser
 import { installMcp } from './server/mcp';
 import { installCaptions } from './server/captions';
 import { jobs, startYoutubeDownload } from './server/youtube';
+import {installBackgroundRemover} from './server/background';
 
 export async function createApp(production = process.env.NODE_ENV === 'production') {
   const app = express();
@@ -39,6 +40,7 @@ export async function createApp(production = process.env.NODE_ENV === 'productio
   });
   installMcp(app);
   installCaptions(app);
+  installBackgroundRemover(app);
   let exportsRunning = 0;
   app.post('/api/export', async (req, res, next) => {
     if (exportsRunning >= 2) { res.status(429).json({ success: false, error: 'Attendi le esportazioni in corso.' }); return; }

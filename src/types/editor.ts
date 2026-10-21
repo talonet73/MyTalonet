@@ -25,6 +25,9 @@ export interface TimelineClip {
   fadeOut: number; // in seconds for effects
   effectType?: 'camera_shake' | 'glow' | 'blur' | 'glitch' | 'vintage' | 'cinematic' | 'dissolvenza' | 'zoom_in' | 'zoom_out' | 'monochrome';
   effects?: VisualEffect[];
+  intensity?: number; // effect controls: 0..10, default 5
+  speed?: number;
+  effectSpan?: number; // original animation duration, retained through cuts
   adjustments?: Adjustments;
   mediaUrl?: string;
   mediaThumbnail?: string;

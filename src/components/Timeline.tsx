@@ -207,7 +207,7 @@ export const Timeline: React.FC<TimelineProps> = ({
         if (trimmingClip.edge === 'start') {
           // Adjust start time & duration
           const sourceClip=clips.find(c=>c.id===trimmingClip.id);
-          const hasSourceTime=sourceClip && ['video','audio'].includes(sourceClip.type);
+          const hasSourceTime=sourceClip && ['video','audio','effect'].includes(sourceClip.type);
           const maxLeftShift = hasSourceTime ? Math.min(trimmingClip.originalStartTime,trimmingClip.originalOffset) : trimmingClip.originalStartTime;
           const maxRightShift = trimmingClip.originalDuration - 0.5; // at least 0.5s duration
           const clampedDelta = Math.max(-maxLeftShift, Math.min(maxRightShift, deltaX));
@@ -779,7 +779,7 @@ export const Timeline: React.FC<TimelineProps> = ({
 
                             <div className="flex items-center justify-between text-[10px] font-bold text-white/95 z-10 pointer-events-none">
                               <span className="bg-black/50 px-1 py-0.2 rounded font-sans">
-                                Dissolvenza {clip.fadeIn.toFixed(1)}s
+                                🎞 {clip.intensity ?? 5}/10 · {clip.speed ?? 5}/10
                               </span>
                             </div>
 

@@ -2,26 +2,20 @@ import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import type { TimelineClip } from '../types/editor';
 import { ADJUSTMENTS, EFFECTS, type VisualEffect } from '../services/visualSettings';
-export function EditingToolsPanel({ tab, selected, onClose, onUpdate, onCrossDissolve, children }: {
+import {EffectPreview} from './EffectPreview';
+export function EditingToolsPanel({ tab, selected, onClose, onUpdate, onCrossDissolve, onAddEffect, children }: {
   tab:string; selected:TimelineClip|null; onClose:()=>void; onUpdate:(updates:Partial<TimelineClip>)=>void;
   onCrossDissolve:(duration:number)=>void; children?:React.ReactNode;
+  onAddEffect:(type:VisualEffect)=>void;
 }) {
   const [transitionDuration,setTransitionDuration]=useState(.8);
   const visual=selected && ['video','image'].includes(selected.type);
-  function toggle(type:VisualEffect) {
-    if(!selected)return;
-    let effects=selected.effects || [];
-    if(effects.includes(type))effects=effects.filter(e=>e!==type);
-    else effects=[...effects.filter(e=>!(type==='zoom_in' && e==='zoom_out') && !(type==='zoom_out' && e==='zoom_in')),type];
-    onUpdate({effects});
-  }
   return <section role="dialog" aria-label={`Pannello ${tab}`} className="absolute top-[105px] left-[300px] z-40 w-[360px] max-h-[calc(100vh-150px)] overflow-y-auto rounded-xl border border-slate-600 bg-[#111a2b] shadow-2xl text-sm">
     <header className="sticky top-0 z-10 bg-[#111a2b] flex items-center justify-between p-3 border-b border-slate-700"><h2 className="font-bold text-cyan-300">{tab}</h2><button aria-label="Chiudi pannello" onClick={onClose} className="p-1 rounded hover:bg-slate-700"><X size={18}/></button></header>
     {tab==='Captions' ? <div className="h-[440px]">{children}</div> : <div className="p-4 space-y-4">
-      <p className="text-xs text-slate-300">{visual ? `Clip: ${selected.name}` : 'Seleziona una clip video o un’immagine nella timeline.'}</p>
+      <p className="text-xs text-slate-300">{tab==='Effects' ? 'Trascina un’anteprima sulla traccia EFFECTS, oppure cliccala per inserirla al cursore. Seleziona poi il mattoncino per regolare intensità e velocità.' : visual ? `Clip: ${selected.name}` : 'Seleziona una clip video o un’immagine nella timeline.'}</p>
       {tab==='Effects' && <>
-        <div className="grid grid-cols-2 gap-2">{EFFECTS.map(effect=><button key={effect.type} aria-pressed={Boolean(selected?.effects?.includes(effect.type))} disabled={!visual} title={effect.description} onClick={()=>toggle(effect.type)} className={`rounded-lg border p-3 text-left disabled:opacity-40 ${selected?.effects?.includes(effect.type)?'border-cyan-400 bg-cyan-950':'border-slate-600 bg-slate-800 hover:bg-slate-700'}`}><strong className="block text-xs">{effect.label}</strong><span className="block text-[10px] mt-1 text-slate-300">{effect.description}</span></button>)}</div>
-        <button disabled={!visual} onClick={()=>onUpdate({effects:[]})} className="w-full p-2 rounded border border-slate-600 disabled:opacity-40">Rimuovi effetti</button>
+        <div className="grid grid-cols-2 gap-2">{EFFECTS.map(effect=><button key={effect.type} draggable aria-label={`Inserisci ${effect.label}`} data-effect-type={effect.type} title={effect.description} onDragStart={e=>{e.dataTransfer.setData('application/json',JSON.stringify({type:'effect',effectType:effect.type}));e.dataTransfer.effectAllowed='copy';}} onClick={()=>onAddEffect(effect.type)} className="rounded-lg border border-slate-600 bg-slate-800 hover:bg-slate-700 p-2 text-left cursor-grab"><EffectPreview type={effect.type}/><strong className="block text-xs mt-2">{effect.label}</strong><span className="block text-[10px] mt-1 text-slate-300">{effect.description}</span></button>)}</div>
       </>}
       {tab==='Transitions' && <>
         <label className="block text-xs">Durata dissolvenza (secondi)<input type="number" min="0.1" max="5" step="0.1" value={transitionDuration} onChange={e=>setTransitionDuration(Math.max(.1,Math.min(5,Number(e.target.value)||.1)))} className="block mt-2 w-full p-2 bg-slate-900 rounded border border-slate-600"/></label>

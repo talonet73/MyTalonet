@@ -29,7 +29,7 @@ async function main() {
   const local = process.env.LOCALAPPDATA;
   if (!local) throw new Error('Non trovo la cartella personale di Windows.');
   const cache = path.join(local, 'TALEDIT');
-  const env = { ...process.env, WHISPER_PYTHON: path.join(cache, 'whisper-env', 'Scripts', 'python.exe'), WHISPER_MODEL_DIR: path.join(cache, 'whisper-small'), HF_HOME: path.join(cache, 'huggingface'), HF_XET_CACHE: path.join(cache, 'huggingface', 'xet'), npm_config_cache: path.join(cache, 'npm') };
+  const env = { ...process.env, WHISPER_PYTHON: path.join(cache, 'whisper-env', 'Scripts', 'python.exe'), WHISPER_MODEL_DIR: path.join(cache, 'whisper-small'), HF_HOME: path.join(cache, 'huggingface'), HF_XET_CACHE: path.join(cache, 'huggingface', 'xet'), BG_PYTHON:path.join(cache,'bg-env','Scripts','python.exe'),BG_MODEL_DIR:path.join(cache,'bg-models'),npm_config_cache: path.join(cache, 'npm') };
   fs.mkdirSync(cache, {recursive:true});
   const lockHash = crypto.createHash('sha256').update(fs.readFileSync(path.join(root, 'package-lock.json'))).digest('hex');
   const marker = path.join(root, 'node_modules', '.taledit-lock');
@@ -51,6 +51,17 @@ async function main() {
     console.log('Scarico il modello vocale gratuito. Questa operazione richiede Internet solo al primo avvio...');
     await run(env.WHISPER_PYTHON, [path.join(root,'scripts','download-whisper.py')], env);
   }
+  try {
+    if(!fs.existsSync(env.BG_PYTHON))await run(python[0],[...python[1],'-m','venv',path.join(cache,'bg-env')],env);
+    const bgRequirements=path.join(root,'scripts','requirements-bg.lock');
+    const bgHash=crypto.createHash('sha256').update(fs.readFileSync(bgRequirements)).digest('hex'),bgMarker=path.join(cache,'bg-packages');
+    if(!fs.existsSync(bgMarker)||fs.readFileSync(bgMarker,'utf8')!==bgHash){
+      console.log('Preparo BG Remover gratuito...');
+      await run(env.BG_PYTHON,['-m','pip','install','--cache-dir',path.join(cache,'pip'),'-r',bgRequirements],env);
+      fs.writeFileSync(bgMarker,bgHash);
+    }
+    if(!fs.existsSync(path.join(env.BG_MODEL_DIR,'models','u2netp','u2netp.onnx')))await run(env.BG_PYTHON,[path.join(root,'scripts','download-bg-model.py')],env);
+  }catch(error){console.error('BG Remover non pronto:',error.message);console.error('TALEDIT si avvia comunque. Riapri l’app per riprovare la preparazione.');}
   const port = Number(env.PORT || 3000);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Impostazione di avvio non valida.');
   const origin = `http://127.0.0.1:${port}`;

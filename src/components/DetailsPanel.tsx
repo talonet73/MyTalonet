@@ -69,6 +69,10 @@ export const DetailsPanel: React.FC<DetailsPanelProps> = ({
             </div>
 
             {/* DURATA */}
+            {selectedClip.type==='effect' && <section aria-label="Controlli effetto" className="space-y-4 p-3 rounded border border-rose-700 bg-rose-950/30">
+              <strong className="text-rose-200">Controlli effetto</strong>
+              {([{key:'intensity',label:'Intensità'},{key:'speed',label:'Velocità'}] as const).map(({key,label})=><label key={key} className="block"><span className="flex justify-between"><span>{label}</span><output>{selectedClip[key] ?? 5} / 10</output></span><input aria-label={label} type="range" min="0" max="10" step="0.1" value={selectedClip[key] ?? 5} onChange={e=>onUpdateClip({[key]:Number(e.target.value)})} className="w-full accent-rose-400"/></label>)}
+            </section>}
             <div>
               <span className="block text-[10px] uppercase font-bold text-gray-400 tracking-wider">
                 DURATA

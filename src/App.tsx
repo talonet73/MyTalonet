@@ -5,7 +5,9 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { EditingToolsPanel } from './components/EditingToolsPanel';
-import { applyCrossDissolve } from './services/visualSettings';
+import {BGRemoverPanel} from './components/BGRemoverPanel';
+import { applyCrossDissolve, makeEffectClip, type VisualEffect } from './services/visualSettings';
+import {allowedOnTrack, normalizeTrackAssignments} from './services/trackRules';
 import { TopNav } from './components/TopNav';
 import { MediaLibraryPanel, initialMediaAssets } from './components/MediaLibraryPanel';
 import { CaptionsPanel } from './components/CaptionsPanel';
@@ -188,6 +190,7 @@ export default function App() {
 
   const sharedState = { clips, tracks, subtitles, mediaAssets, currentTime, selectedClipId, aspectRatio };
   useEditorSync(sharedState, remote => {
+    const normalized=normalizeTrackAssignments(remote.clips,remote.tracks);remote={...remote,...normalized};
     setClips(remote.clips); clipsRef.current = remote.clips; pushHistory(remote.clips,remote.tracks);
     setTracks(remote.tracks); setSubtitles(remote.subtitles); setMediaAssets(remote.mediaAssets);
     setCurrentTime(remote.currentTime); setSelectedClipId(remote.selectedClipId);
@@ -313,7 +316,8 @@ export default function App() {
     const origin = source[0].startTime;
     const copies = source.map(c => ({ ...c, id: ids.get(c.id)!, startTime: time + c.startTime - origin,
       linkedClipId: c.linkedClipId ? ids.get(c.linkedClipId) : undefined, isLinked: Boolean(c.linkedClipId && ids.has(c.linkedClipId)), name: `${c.name} (Copia)` }));
-    const updated = [...clips, ...copies]; setClips(updated); pushHistory(updated);
+    const normalized=normalizeTrackAssignments([...clips,...copies],tracks);
+    const updated=normalized.clips;setTracks(normalized.tracks);tracksRef.current=normalized.tracks;setClips(updated);clipsRef.current=updated;pushHistory(updated,normalized.tracks);
     setSelectedClipId(copies[0].id); setSelectedClipIds([copies[0].id]);
   };
   const sourcePair = (id: string | null) => {
@@ -364,6 +368,7 @@ export default function App() {
         const content = evt.target?.result as string;
         const data = JSON.parse(content);
         if (data.appName !== 'TALEDIT' || !Array.isArray(data.tracks) || !Array.isArray(data.clips) || data.tracks.length > 100 || data.clips.length > 200 || data.clips.some((c: any) => !c.id || !['video','audio','image','effect'].includes(c.type) || !Number.isFinite(c.startTime) || c.startTime < 0 || !Number.isFinite(c.duration) || c.duration <= 0)) throw new Error('Progetto TALEDIT non valido.');
+        const normalized=normalizeTrackAssignments(data.clips,data.tracks);data.clips=normalized.clips;data.tracks=normalized.tracks;
         if (data.tracks) setTracks(data.tracks);
         if (data.clips) {
           setClips(data.clips);
@@ -412,11 +417,7 @@ export default function App() {
   // 3) Audio -> solo timeline audio
   // 4) Immagini -> solo timeline audio
   const isMediaAllowedOnTrack = (mediaType: 'effect' | 'video' | 'audio' | 'image', trackType: TrackType): boolean => {
-    if (mediaType === 'effect') return trackType === 'effect';
-    if (mediaType === 'video') return trackType === 'video';
-    if (mediaType === 'audio') return trackType === 'audio';
-    if (mediaType === 'image') return ['image','video','audio'].includes(trackType);
-    return false;
+    return allowedOnTrack(mediaType,trackType);
   };
 
   // Drag and drop asset directly from stage files into allowed timeline track
@@ -427,7 +428,19 @@ export default function App() {
       setSelectedClipId(next.selectedClipId); setSelectedClipIds(next.selectedClipId ? [next.selectedClipId] : []);
     } catch (error) { setTrackConstraintWarning((error as Error).message); }
   };
-  const handleDropAssetOnTrack = (asset: MediaAsset, trackId: string, dropTime: number) => {
+  const handleAddEffect = (type:VisualEffect, trackId?:string, time=currentTime) => {
+    let nextTracks=tracks;
+    let track=trackId?tracks.find(t=>t.id===trackId):tracks.find(t=>t.type==='effect');
+    if(trackId && track?.type!=='effect'){setTrackConstraintWarning('Gli effetti vanno soltanto nella traccia EFFECTS.');return;}
+    if(!track){track={id:crypto.randomUUID(),name:'EFFECTS',type:'effect',isMuted:false,isSolo:false,headerBg:'#35121b',laneBg:'#1e141a'};nextTracks=[...tracks,track];}
+    try {
+      const effect=makeEffectClip(type,track.id,time),next=[...clips,effect];
+      setTracks(nextTracks);tracksRef.current=nextTracks;setClips(next);clipsRef.current=next;pushHistory(next,nextTracks);
+      setSelectedClipId(effect.id);setSelectedClipIds([effect.id]);setActiveTab('');
+    }catch(error){setTrackConstraintWarning((error as Error).message);}
+  };
+  const handleDropAssetOnTrack = (asset: any, trackId: string, dropTime: number) => {
+    if(asset.type==='effect'){handleAddEffect(asset.effectType,trackId,dropTime);return;}
     addAsset(asset, trackId, dropTime);
   };
 
@@ -730,7 +743,7 @@ export default function App() {
         if(asset)updates={...updates,duration:Math.max(.04,Math.min(updates.duration,asset.durationSec-(updates.offset ?? target.offset ?? 0)))};
       }
       const linkedUpdates = Object.fromEntries(Object.entries(updates).filter(([key]) => ['startTime', 'duration', 'offset'].includes(key)));
-      const next = prev.map(c => c.id === clipId ? { ...c, ...updates } : target?.isLinked && target.linkedClipId === c.id ? { ...c, ...linkedUpdates } : c);
+      const next = prev.map(c => c.id === clipId ? { ...c, ...updates } : target?.isLinked && target.linkedClipId === c.id ? { ...c, ...linkedUpdates, ...(updates.offset!==undefined?{offset:Math.max(0,Math.round(((c.offset||0)+updates.offset-(target.offset||0))*1e6)/1e6)}:{}) } : c);
       clipsRef.current = next;
       return next;
     });
@@ -913,8 +926,14 @@ export default function App() {
         onToggleMic={handleToggleMic}
       />
 
-      {activeTab && <EditingToolsPanel tab={activeTab} selected={selectedClip} onClose={() => setActiveTab('')}
+      <BGRemoverPanel open={activeTab==='BG Remover'} selected={selectedClip} onClose={()=>setActiveTab('')} onComplete={(asset,original)=>{
+        setMediaAssets(prev=>[...prev,asset]);
+        const next=clipsRef.current.map(c=>c.id===original.id && c.mediaUrl===original.mediaUrl && c.offset===original.offset && c.duration===original.duration?{...c,assetId:asset.id,mediaUrl:asset.fileUrl,mediaThumbnail:asset.thumbnailUrl,offset:0,name:asset.name}:c);
+        if(next.some((c,i)=>c!==clipsRef.current[i])){setClips(next);clipsRef.current=next;pushHistory(next);}
+      }}/>
+      {activeTab && activeTab!=='BG Remover' && <EditingToolsPanel tab={activeTab} selected={selectedClip} onClose={() => setActiveTab('')}
         onUpdate={updates => { if (!selectedClipId) return; const next=clips.map(c=>c.id===selectedClipId?{...c,...updates}:c);setClips(next);clipsRef.current=next;pushHistory(next); }}
+        onAddEffect={type=>handleAddEffect(type)}
         onCrossDissolve={duration => { try { const next=applyCrossDissolve(clips,selectedClipId || '',duration);setClips(next);clipsRef.current=next;pushHistory(next); } catch(error) {setTrackConstraintWarning((error as Error).message);} }}>
         <CaptionsPanel spokenLanguage={spokenLanguage} setSpokenLanguage={setSpokenLanguage} bilingualCaptions={bilingualCaptions} setBilingualCaptions={setBilingualCaptions} deleteCurrentCaptions={deleteCurrentCaptions} setDeleteCurrentCaptions={setDeleteCurrentCaptions} subtitles={subtitles} onGenerateCaptions={handleGenerateCaptions} onUpdateSubtitle={handleUpdateSubtitle} onDeleteSubtitle={handleDeleteSubtitle}/>
       </EditingToolsPanel>}
