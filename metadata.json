@@ -1,0 +1,6 @@
+{
+  "name": "TALEDIT",
+  "description": "TALEDIT - Professional Video Editor with Claude DT MCP Integration, custom timeline handles, and prompt-driven video editing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

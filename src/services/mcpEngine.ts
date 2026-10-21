@@ -1,0 +1,351 @@
+import { TimelineClip, Track, SubtitleItem, ClaudePromptMessage } from '../types/editor';
+
+export interface MCPToolCallResult {
+  message: string;
+  actionExecuted?: string;
+  updatedClips?: TimelineClip[];
+  updatedTracks?: Track[];
+  updatedTime?: number;
+  updatedSubtitles?: SubtitleItem[];
+  selectedClipId?: string;
+}
+
+export const CLAUDE_MCP_CONFIG = {
+  serverName: "taledit-video-editor-mcp",
+  version: "1.0.0",
+  protocolVersion: "2024-11-05",
+  endpoints: {
+    sse: "/api/mcp/sse",
+    messages: "/api/mcp/messages"
+  },
+  availableTools: [
+    {
+      name: "get_timeline_state",
+      description: "Recupera lo stato attuale della timeline, tracce, clip e cursore temporale."
+    },
+    {
+      name: "cut_at_playhead",
+      description: "Taglia la clip selezionata o tutte le clip al tempo corrente del playhead."
+    },
+    {
+      name: "set_transparency",
+      description: "Imposta la maniglia di trasparenza (0-100%) per una clip video."
+    },
+    {
+      name: "set_volume",
+      description: "Imposta la maniglia del volume in decibel (-60 dB a +12 dB) per una clip audio."
+    },
+    {
+      name: "set_dissolvenza",
+      description: "Imposta la dissolvenza in entrata (fade in) e/o uscita (fade out) per le clip di effetto."
+    },
+    {
+      name: "add_clip",
+      description: "Aggiunge una nuova clip (video, audio o effetto) sulla timeline."
+    },
+    {
+      name: "delete_clip",
+      description: "Elimina la clip selezionata o specificata per ID."
+    },
+    {
+      name: "seek_time",
+      description: "Sposta il playhead ad un tempo specifico (es. 00:15 o 15 secondi)."
+    },
+    {
+      name: "generate_captions",
+      description: "Genera sottotitoli automatici nella lingua specificata."
+    }
+  ]
+};
+
+// Generates the JSON snippet to paste into claude_desktop_config.json
+export function getClaudeDesktopConfigJson(hostUrl: string): string {
+  const origin = hostUrl || 'http://localhost:3000';
+  return JSON.stringify(
+    {
+      mcpServers: {
+        taledit: {
+          command: "npx",
+          args: [
+            "-y",
+            "mcp-remote",
+            `${origin}/api/mcp/sse`
+          ],
+          env: {
+            APP_NAME: "TALEDIT",
+            EDITOR_MODE: "ACTIVE"
+          }
+        }
+      }
+    },
+    null,
+    2
+  );
+}
+
+// Intelligent prompt interpreter for video editing commands
+export function executeClaudePrompt(
+  prompt: string,
+  clips: TimelineClip[],
+  tracks: Track[],
+  currentTime: number,
+  selectedClipId: string | null,
+  subtitles: SubtitleItem[]
+): MCPToolCallResult {
+  const text = prompt.toLowerCase().trim();
+
+  // 1. Cut / Taglia
+  if (text.includes('taglia') || text.includes('cut') || text.includes('dividi') || text.includes('split')) {
+    // Check if time specified
+    let targetTime = currentTime;
+    const timeMatch = text.match(/(\d{1,2}):(\d{2})/);
+    if (timeMatch) {
+      targetTime = parseInt(timeMatch[1], 10) * 60 + parseInt(timeMatch[2], 10);
+    } else {
+      const secMatch = text.match(/(\d+)\s*(s|sec|secondi)/);
+      if (secMatch) {
+        targetTime = parseInt(secMatch[1], 10);
+      }
+    }
+
+    // Find clip to cut
+    let clipToCut = clips.find(c => c.id === selectedClipId);
+    if (!clipToCut) {
+      clipToCut = clips.find(c => targetTime >= c.startTime && targetTime <= c.startTime + c.duration);
+    }
+
+    if (clipToCut && targetTime > clipToCut.startTime && targetTime < clipToCut.startTime + clipToCut.duration) {
+      const firstPartDuration = targetTime - clipToCut.startTime;
+      const secondPartDuration = clipToCut.duration - firstPartDuration;
+
+      const firstPart: TimelineClip = {
+        ...clipToCut,
+        duration: Math.round(firstPartDuration * 10) / 10
+      };
+
+      const secondPart: TimelineClip = {
+        ...clipToCut,
+        id: `clip_${Date.now()}_part2`,
+        name: `${clipToCut.name} (Part 2)`,
+        startTime: Math.round(targetTime * 10) / 10,
+        duration: Math.round(secondPartDuration * 10) / 10,
+        offset: clipToCut.offset + firstPartDuration
+      };
+
+      const updated = clips.map(c => (c.id === clipToCut!.id ? firstPart : c)).concat(secondPart);
+
+      return {
+        message: `Ho tagliato con successo la clip "${clipToCut.name}" al tempo ${formatTimecode(targetTime)}. Sono state create due sezioni distinte sulla traccia.`,
+        actionExecuted: `cut_at_playhead(${formatTimecode(targetTime)})`,
+        updatedClips: updated,
+        updatedTime: targetTime,
+        selectedClipId: secondPart.id
+      };
+    } else {
+      return {
+        message: `Non è stata trovata alcuna clip tagliabile al tempo ${formatTimecode(targetTime)}. Posiziona prima il playhead sopra una clip o specifica il nome.`,
+        actionExecuted: 'cut_error'
+      };
+    }
+  }
+
+  // 2. Transparency / Trasparenza / Opacità
+  if (text.includes('trasparen') || text.includes('opacit') || text.includes('opacity')) {
+    const percentMatch = text.match(/(\d+)\s*%/);
+    let targetPercent = 50;
+    if (percentMatch) {
+      targetPercent = Math.min(100, Math.max(0, parseInt(percentMatch[1], 10)));
+    } else {
+      const numMatch = text.match(/\b([0-9]{1,3})\b/);
+      if (numMatch) {
+        targetPercent = Math.min(100, Math.max(0, parseInt(numMatch[1], 10)));
+      }
+    }
+
+    // Find video clip
+    let targetClip = clips.find(c => c.id === selectedClipId && c.type === 'video');
+    if (!targetClip) {
+      targetClip = clips.find(c => c.type === 'video');
+    }
+
+    if (targetClip) {
+      const updated = clips.map(c => 
+        c.id === targetClip!.id ? { ...c, transparency: targetPercent } : c
+      );
+
+      return {
+        message: `Maniglia orizzontale di trasparenza per "${targetClip.name}" impostata al ${targetPercent}%. La maniglia grafica sulla timeline è stata aggiornata.`,
+        actionExecuted: `set_transparency("${targetClip.name}", ${targetPercent}%)`,
+        updatedClips: updated,
+        selectedClipId: targetClip.id
+      };
+    }
+  }
+
+  // 3. Volume / Decibel / Audio
+  if (text.includes('volume') || text.includes('decibel') || text.includes('db') || text.includes('audio')) {
+    const dbMatch = text.match(/([+-]?\d+(?:\.\d+)?)\s*(?:db|decibel)?/i);
+    let targetDb = 0;
+    if (dbMatch && text.match(/[+-]?\d+/)) {
+      targetDb = Math.min(12, Math.max(-60, parseFloat(dbMatch[1])));
+    } else if (text.includes('muto') || text.includes('mute') || text.includes('azzera')) {
+      targetDb = -60;
+    } else if (text.includes('alza') || text.includes('aumenta')) {
+      targetDb = 3;
+    } else if (text.includes('abbassa')) {
+      targetDb = -6;
+    }
+
+    let targetClip = clips.find(c => c.id === selectedClipId && c.type === 'audio');
+    if (!targetClip) {
+      targetClip = clips.find(c => c.type === 'audio');
+    }
+
+    if (targetClip) {
+      const updated = clips.map(c => 
+        c.id === targetClip!.id ? { ...c, volumeDb: targetDb } : c
+      );
+
+      return {
+        message: `Maniglia orizzontale del volume per "${targetClip.name}" impostata a ${targetDb >= 0 ? `+${targetDb}` : targetDb} dB. Il feedback visivo della maniglia sulla clip verde è sincronizzato.`,
+        actionExecuted: `set_volume("${targetClip.name}", ${targetDb} dB)`,
+        updatedClips: updated,
+        selectedClipId: targetClip.id
+      };
+    }
+  }
+
+  // 4. Dissolvenza / Fade in / Fade out
+  if (text.includes('dissolvenza') || text.includes('fade') || text.includes('sfuma')) {
+    const durationMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:s|sec|secondi)?/);
+    let fadeDuration = 1.5;
+    if (durationMatch) {
+      fadeDuration = parseFloat(durationMatch[1]);
+    }
+
+    let targetClip = clips.find(c => c.id === selectedClipId && c.type === 'effect');
+    if (!targetClip) {
+      targetClip = clips.find(c => c.type === 'effect');
+    }
+
+    if (targetClip) {
+      const updated = clips.map(c => 
+        c.id === targetClip!.id ? { ...c, fadeIn: fadeDuration, fadeOut: fadeDuration } : c
+      );
+
+      return {
+        message: `Maniglie verticali laterali di dissolvenza aggiornate su "${targetClip.name}": Fade In e Fade Out impostati a ${fadeDuration}s con curva grafica attiva.`,
+        actionExecuted: `set_dissolvenza("${targetClip.name}", ${fadeDuration}s)`,
+        updatedClips: updated,
+        selectedClipId: targetClip.id
+      };
+    }
+  }
+
+  // 5. Add Effect / Aggiungi Effetto
+  if (text.includes('effetto') || text.includes('effect') || text.includes('camera') || text.includes('glitch') || text.includes('blur')) {
+    const newEffect: TimelineClip = {
+      id: `effect_${Date.now()}`,
+      name: text.includes('glitch') ? 'Glitch Cyber' : text.includes('blur') ? 'Motion Blur' : 'Camera Handed FX',
+      trackId: 'track_effects',
+      type: 'effect',
+      startTime: Math.round(currentTime * 10) / 10,
+      duration: 6.0,
+      offset: 0,
+      color: '#d9534f',
+      transparency: 100,
+      volumeDb: 0,
+      fadeIn: 1.2,
+      fadeOut: 1.2,
+      effectType: text.includes('glitch') ? 'glitch' : text.includes('blur') ? 'blur' : 'camera_shake'
+    };
+
+    const updated = [...clips, newEffect];
+    return {
+      message: `Aggiunto nuovo effetto "${newEffect.name}" sulla pista rossa EFFECTS a ${formatTimecode(currentTime)} con maniglie di dissolvenza laterali attive.`,
+      actionExecuted: `add_effect("${newEffect.name}")`,
+      updatedClips: updated,
+      selectedClipId: newEffect.id
+    };
+  }
+
+  // 6. Subtitles / Sottotitoli
+  if (text.includes('sottotitol') || text.includes('caption') || text.includes('traduci') || text.includes('lingua')) {
+    const newSubs: SubtitleItem[] = [
+      { id: 'sub_1', startTime: 1.0, endTime: 4.5, text: "Benvenuti in TALEDIT, montaggio video potenziato con Claude MCP." },
+      { id: 'sub_2', startTime: 5.0, endTime: 9.0, text: "Regola maniglie di trasparenza, decibel audio e dissolvenze." },
+      { id: 'sub_3', startTime: 9.5, endTime: 14.0, text: "I comandi vocali e da prompt Claude DT modificano la timeline istantaneamente." }
+    ];
+
+    return {
+      message: `Generati e sincronizzati 3 blocchi di sottotitoli in Italiano per la timeline. Puoi visualizzarli nel pannello centrale Captions e sul Player.`,
+      actionExecuted: `generate_captions(Italian)`,
+      updatedSubtitles: newSubs
+    };
+  }
+
+  // 7. Delete / Elimina / Cestino
+  if (text.includes('elimina') || text.includes('cancella') || text.includes('delete') || text.includes('cestino')) {
+    if (selectedClipId) {
+      const deletedClip = clips.find(c => c.id === selectedClipId);
+      const updated = clips.filter(c => c.id !== selectedClipId);
+      return {
+        message: `Clip "${deletedClip?.name || selectedClipId}" rimossa con successo dalla timeline.`,
+        actionExecuted: `delete_clip(${selectedClipId})`,
+        updatedClips: updated,
+        selectedClipId: undefined
+      };
+    } else {
+      return {
+        message: "Nessuna clip attualmente selezionata. Seleziona prima un mattoncino sulla timeline per eliminarlo.",
+        actionExecuted: 'delete_none'
+      };
+    }
+  }
+
+  // 8. Seek / Sposta Playhead
+  if (text.includes('vai a') || text.includes('sposta') || text.includes('seek') || text.includes('secondi') || text.includes(':')) {
+    const timeMatch = text.match(/(\d{1,2}):(\d{2})/);
+    let targetTime = 0;
+    if (timeMatch) {
+      targetTime = parseInt(timeMatch[1], 10) * 60 + parseInt(timeMatch[2], 10);
+    } else {
+      const secMatch = text.match(/(\d+)\s*(s|sec|secondi)/);
+      if (secMatch) {
+        targetTime = parseInt(secMatch[1], 10);
+      }
+    }
+
+    return {
+      message: `Playhead spostato al tempo ${formatTimecode(targetTime)}.`,
+      actionExecuted: `seek_time(${formatTimecode(targetTime)})`,
+      updatedTime: targetTime
+    };
+  }
+
+  // Default fallback conversational response with suggestions
+  return {
+    message: `Ricevuto comando da prompt: "${prompt}". Ho analizzato la timeline di TALEDIT. Puoi impartirmi ordini come:
+• "Taglia la clip al playhead"
+• "Imposta trasparenza video all'80%"
+• "Alza volume audio a +3 dB"
+• "Applica dissolvenza di 1.8s all'effetto"
+• "Aggiungi effetto Glitch"
+• "Genera sottotitoli in Italiano"
+• "Vai a 00:20"`,
+    actionExecuted: 'claude_consult'
+  };
+}
+
+export function formatTimecode(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  const frames = Math.floor((seconds % 1) * 30);
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}:${frames.toString().padStart(2, '0')}`;
+}
+
+export function formatSecondsToMinSec(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
