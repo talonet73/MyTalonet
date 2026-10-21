@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Search, Music, Film, Image as ImageIcon, Trash2, Layers, CheckCircle2 } from 'lucide-react';
+import { Plus, Search, Music, Film, Image as ImageIcon, Trash2, Layers, CheckCircle2, Youtube } from 'lucide-react';
 import { MediaAsset } from '../types/editor';
+import { importMediaFile } from '../services/mediaService';
+import { YouTubeDialog } from './YouTubeDialog';
 
 interface MediaLibraryPanelProps {
   onAddMediaToTimeline: (asset: MediaAsset) => void;
@@ -11,34 +13,7 @@ interface MediaLibraryPanelProps {
 }
 
 // Initial media assets strictly matching ONLY the files present in the stage
-export const initialMediaAssets: MediaAsset[] = [
-  {
-    id: 'stage_video_1',
-    name: 'Intro01.mp4',
-    type: 'video',
-    duration: '00:14',
-    durationSec: 14,
-    fileUrl: '/media_downloads/yt_1792223085761_ebms.mp4',
-    isLost: false,
-  },
-  {
-    id: 'stage_audio_1',
-    name: 'Musica.wav',
-    type: 'audio',
-    duration: '00:14',
-    durationSec: 14,
-    fileUrl: '/media_downloads/yt_1792223106892_js0e.mp4',
-    isLost: false,
-  },
-  {
-    id: 'stage_image_1',
-    name: 'Overlay_Grafica.png',
-    type: 'image',
-    duration: '00:09',
-    durationSec: 9,
-    isLost: false,
-  },
-];
+export const initialMediaAssets: MediaAsset[] = [];
 
 export const MediaLibraryPanel: React.FC<MediaLibraryPanelProps> = ({
   onAddMediaToTimeline,
@@ -51,6 +26,7 @@ export const MediaLibraryPanel: React.FC<MediaLibraryPanelProps> = ({
   const [filterType, setFilterType] = useState<'All' | 'video' | 'audio' | 'image'>('All');
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   // Filter stage files
   const filteredAssets = assets.filter(item => {
@@ -65,216 +41,38 @@ export const MediaLibraryPanel: React.FC<MediaLibraryPanelProps> = ({
     if (selectedAssetId === id) setSelectedAssetId(null);
   };
 
-  // Keyboard shortcut: Delete or Backspace removes the selected stage file
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!selectedAssetId) return;
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        handleDeleteAsset(selectedAssetId);
+    const outside = (event: PointerEvent) => {
+      if (!panelRef.current?.contains(event.target as Node)) {
+        setSelectedAssetId(null);
+        if (document.activeElement === panelRef.current) panelRef.current?.blur();
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedAssetId, assets]);
+    document.addEventListener('pointerdown', outside);
+    return () => document.removeEventListener('pointerdown', outside);
+  }, []);
 
   const [importNotice, setImportNotice] = useState<string | null>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const allowedExts = ['.mp4', '.mov', '.avi', '.mp3', '.wav', '.png', '.jpg', '.jpeg'];
-      const files = Array.from(e.target.files);
-
-      let rejectedCount = 0;
-
-      files.forEach(file => {
-        const ext = '.' + file.name.split('.').pop()?.toLowerCase();
-        if (!allowedExts.includes(ext)) {
-          rejectedCount++;
-          return;
-        }
-
-        const type: 'video' | 'audio' | 'image' =
-          file.type.startsWith('video') || ['.mp4', '.mov', '.avi'].includes(ext)
-            ? 'video'
-            : file.type.startsWith('audio') || ['.mp3', '.wav'].includes(ext)
-            ? 'audio'
-            : 'image';
-
-        const fileUrl = URL.createObjectURL(file);
-        const assetId = `custom_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-
-        if (type === 'video') {
-          // Asynchronously read real video duration and capture thumbnail
-          const tempVideo = document.createElement('video');
-          tempVideo.preload = 'metadata';
-          tempVideo.src = fileUrl;
-
-          let isResolved = false;
-          const finalizeVideo = (sec: number, thumb?: string) => {
-            if (isResolved) return;
-            isResolved = true;
-            const validSec = Math.max(1, Math.round(sec) || 12);
-            const mins = Math.floor(validSec / 60);
-            const remainderSecs = validSec % 60;
-            const duration = `${mins.toString().padStart(2, '0')}:${remainderSecs.toString().padStart(2, '0')}`;
-
-            const newAsset: MediaAsset = {
-              id: assetId,
-              name: file.name,
-              type: 'video',
-              duration,
-              durationSec: validSec,
-              fileUrl,
-              thumbnailUrl: thumb,
-              isLost: false,
-            };
-            onAddAsset(newAsset);
-            onCustomFileImported(file);
-
-            // Upload to server so FFmpeg has the file for high quality export
-            fetch('/api/upload-media', {
-              method: 'POST',
-              headers: { 'x-filename': file.name },
-              body: file,
-            })
-              .then(r => r.json())
-              .then(res => {
-                if (res && res.url) {
-                  newAsset.fileUrl = res.url;
-                }
-              })
-              .catch(() => {});
-          };
-
-          tempVideo.onloadedmetadata = () => {
-            const sec = tempVideo.duration;
-            // Seek forward slightly to capture a representative thumbnail
-            tempVideo.currentTime = Math.min(1.0, sec > 2 ? 1.0 : sec / 2);
-          };
-
-          tempVideo.onseeked = () => {
-            try {
-              const canvas = document.createElement('canvas');
-              canvas.width = 160;
-              canvas.height = 90;
-              const ctx = canvas.getContext('2d');
-              if (ctx) {
-                ctx.drawImage(tempVideo, 0, 0, 160, 90);
-                const thumb = canvas.toDataURL('image/jpeg', 0.7);
-                finalizeVideo(tempVideo.duration, thumb);
-                return;
-              }
-            } catch (err) {
-              // ignore
-            }
-            finalizeVideo(tempVideo.duration);
-          };
-
-          tempVideo.onerror = () => {
-            finalizeVideo(15);
-          };
-
-          // Fallback timeout in case browser takes too long to load metadata
-          setTimeout(() => {
-            if (!isResolved) finalizeVideo(15);
-          }, 1500);
-
-        } else if (type === 'audio') {
-          // Asynchronously read real audio duration
-          const tempAudio = document.createElement('audio');
-          tempAudio.preload = 'metadata';
-          tempAudio.src = fileUrl;
-
-          let isResolved = false;
-          const finalizeAudio = (sec: number) => {
-            if (isResolved) return;
-            isResolved = true;
-            const validSec = Math.max(1, Math.round(sec) || 20);
-            const mins = Math.floor(validSec / 60);
-            const remainderSecs = validSec % 60;
-            const duration = `${mins.toString().padStart(2, '0')}:${remainderSecs.toString().padStart(2, '0')}`;
-
-            const newAsset: MediaAsset = {
-              id: assetId,
-              name: file.name,
-              type: 'audio',
-              duration,
-              durationSec: validSec,
-              fileUrl,
-              isLost: false,
-            };
-            onAddAsset(newAsset);
-            onCustomFileImported(file);
-
-            fetch('/api/upload-media', {
-              method: 'POST',
-              headers: { 'x-filename': file.name },
-              body: file,
-            })
-              .then(r => r.json())
-              .then(res => {
-                if (res && res.url) {
-                  newAsset.fileUrl = res.url;
-                }
-              })
-              .catch(() => {});
-          };
-
-          tempAudio.onloadedmetadata = () => {
-            finalizeAudio(tempAudio.duration);
-          };
-
-          tempAudio.onerror = () => {
-            finalizeAudio(20);
-          };
-
-          setTimeout(() => {
-            if (!isResolved) finalizeAudio(20);
-          }, 1500);
-
-        } else {
-          // Image
-          const newAsset: MediaAsset = {
-            id: assetId,
-            name: file.name,
-            type: 'image',
-            duration: '00:08',
-            durationSec: 8,
-            fileUrl,
-            thumbnailUrl: fileUrl,
-            isLost: false,
-          };
-          onAddAsset(newAsset);
-          onCustomFileImported(file);
-
-          fetch('/api/upload-media', {
-            method: 'POST',
-            headers: { 'x-filename': file.name },
-            body: file,
-          })
-            .then(r => r.json())
-            .then(res => {
-              if (res && res.url) {
-                newAsset.fileUrl = res.url;
-                newAsset.thumbnailUrl = res.url;
-              }
-            })
-            .catch(() => {});
-        }
-      });
-
-      if (rejectedCount > 0) {
-        setImportNotice(`⚠️ ${rejectedCount} file scartato. Import accetta solo .mp4, .mov, .avi, .mp3, .wav, .png, .jpg.`);
-        setTimeout(() => setImportNotice(null), 4000);
-      }
-
-      e.target.value = '';
-    }
+  const [youtubeOpen, setYoutubeOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    setImporting(true); setImportNotice(null);
+    try {
+      for (const file of files) { onAddAsset(await importMediaFile(file)); onCustomFileImported(file); }
+    } catch (error) { setImportNotice((error as Error).message); }
+    finally { setImporting(false); }
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#121622] border-r border-[#1e293b] text-white p-3 select-none">
+    <div ref={panelRef} data-stage="true" tabIndex={0} onKeyDown={e => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (selectedAssetId && ['Delete', 'Backspace'].includes(e.key)) { e.preventDefault(); e.stopPropagation(); handleDeleteAsset(selectedAssetId); }
+    }} className="outline-none flex flex-col h-full bg-[#121622] border-r border-[#1e293b] text-white p-3 select-none">
+      {youtubeOpen && <YouTubeDialog onClose={() => setYoutubeOpen(false)} onImported={onAddAsset} />}
+      {importing && <p role="status" className="text-xs text-cyan-300">Caricamento media…</p>}
       {/* Stage Files Title & Counter */}
       <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-[#1c2438]">
         <div className="flex items-center gap-1.5">
@@ -294,6 +92,7 @@ export const MediaLibraryPanel: React.FC<MediaLibraryPanelProps> = ({
       {/* Top Controls: + Import, Search, Filter */}
       <div className="flex items-center gap-2 mb-2.5">
         <button
+          disabled={importing}
           onClick={() => fileInputRef.current?.click()}
           title="Importa file multimediale nello stage"
           className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0d9488] hover:bg-[#0f766e] text-white rounded text-xs font-semibold shadow-sm transition-colors shrink-0 cursor-pointer"
@@ -301,10 +100,11 @@ export const MediaLibraryPanel: React.FC<MediaLibraryPanelProps> = ({
           <Plus className="w-3.5 h-3.5" />
           <span>Import</span>
         </button>
+        <button type="button" aria-label="Importa da YouTube" title="Importa da YouTube" onClick={() => setYoutubeOpen(true)} className="p-1.5 rounded bg-red-950 text-red-400 hover:bg-red-900"><Youtube className="w-5 h-5" /></button>
         <input
           ref={fileInputRef}
           type="file"
-          accept=".mp4,.mov,.avi,.mp3,.wav,.png,.jpg,.jpeg,video/mp4,video/quicktime,video/x-msvideo,audio/mpeg,audio/wav,image/png,image/jpeg"
+          accept="video/*,audio/*,image/png,image/jpeg,image/webp,.mkv"
           multiple
           className="hidden"
           onChange={handleFileChange}
@@ -383,10 +183,11 @@ export const MediaLibraryPanel: React.FC<MediaLibraryPanelProps> = ({
                     e.dataTransfer.setData('application/json', JSON.stringify(item));
                     e.dataTransfer.effectAllowed = 'copy';
                   }}
-                  onClick={() => setSelectedAssetId(item.id)}
+                  onClick={() => { setSelectedAssetId(item.id); panelRef.current?.focus(); }}
                   onDoubleClick={e => {
                     e.stopPropagation();
                     onAddMediaToTimeline(item);
+                    setSelectedAssetId(null); panelRef.current?.blur();
                   }}
                   title={`Clicca per selezionare. Doppio clic per aggiungere al playhead. Trascina sulla traccia desiderata.`}
                   className={`group flex flex-col cursor-pointer active:cursor-grabbing relative select-none rounded-lg p-1 transition-all ${

@@ -1,3 +1,4 @@
+import { timelineTools, applyTimelineTool } from './timelineTools';
 import { TimelineClip, Track, SubtitleItem, ClaudePromptMessage } from '../types/editor';
 
 export interface MCPToolCallResult {
@@ -18,44 +19,7 @@ export const CLAUDE_MCP_CONFIG = {
     sse: "/api/mcp/sse",
     messages: "/api/mcp/messages"
   },
-  availableTools: [
-    {
-      name: "get_timeline_state",
-      description: "Recupera lo stato attuale della timeline, tracce, clip e cursore temporale."
-    },
-    {
-      name: "cut_at_playhead",
-      description: "Taglia la clip selezionata o tutte le clip al tempo corrente del playhead."
-    },
-    {
-      name: "set_transparency",
-      description: "Imposta la maniglia di trasparenza (0-100%) per una clip video."
-    },
-    {
-      name: "set_volume",
-      description: "Imposta la maniglia del volume in decibel (-60 dB a +12 dB) per una clip audio."
-    },
-    {
-      name: "set_dissolvenza",
-      description: "Imposta la dissolvenza in entrata (fade in) e/o uscita (fade out) per le clip di effetto."
-    },
-    {
-      name: "add_clip",
-      description: "Aggiunge una nuova clip (video, audio o effetto) sulla timeline."
-    },
-    {
-      name: "delete_clip",
-      description: "Elimina la clip selezionata o specificata per ID."
-    },
-    {
-      name: "seek_time",
-      description: "Sposta il playhead ad un tempo specifico (es. 00:15 o 15 secondi)."
-    },
-    {
-      name: "generate_captions",
-      description: "Genera sottotitoli automatici nella lingua specificata."
-    }
-  ]
+  availableTools: timelineTools
 };
 
 // Generates the JSON snippet to paste into claude_desktop_config.json
@@ -115,32 +79,8 @@ export function executeClaudePrompt(
     }
 
     if (clipToCut && targetTime > clipToCut.startTime && targetTime < clipToCut.startTime + clipToCut.duration) {
-      const firstPartDuration = targetTime - clipToCut.startTime;
-      const secondPartDuration = clipToCut.duration - firstPartDuration;
-
-      const firstPart: TimelineClip = {
-        ...clipToCut,
-        duration: Math.round(firstPartDuration * 10) / 10
-      };
-
-      const secondPart: TimelineClip = {
-        ...clipToCut,
-        id: `clip_${Date.now()}_part2`,
-        name: `${clipToCut.name} (Part 2)`,
-        startTime: Math.round(targetTime * 10) / 10,
-        duration: Math.round(secondPartDuration * 10) / 10,
-        offset: clipToCut.offset + firstPartDuration
-      };
-
-      const updated = clips.map(c => (c.id === clipToCut!.id ? firstPart : c)).concat(secondPart);
-
-      return {
-        message: `Ho tagliato con successo la clip "${clipToCut.name}" al tempo ${formatTimecode(targetTime)}. Sono state create due sezioni distinte sulla traccia.`,
-        actionExecuted: `cut_at_playhead(${formatTimecode(targetTime)})`,
-        updatedClips: updated,
-        updatedTime: targetTime,
-        selectedClipId: secondPart.id
-      };
+      const result = applyTimelineTool({ clips, tracks, currentTime, selectedClipId: clipToCut.id, subtitles, mediaAssets: [], aspectRatio: '16:9' }, 'cut_clip_at_time', { clipId: clipToCut.id, timeSeconds: targetTime });
+      return { message: `Clip e audio collegato tagliati a ${formatTimecode(targetTime)}.`, actionExecuted: 'cut_clip_at_time', updatedClips: result.clips, updatedTime: targetTime, selectedClipId: result.selectedClipId || undefined };
     } else {
       return {
         message: `Non è stata trovata alcuna clip tagliabile al tempo ${formatTimecode(targetTime)}. Posiziona prima il playhead sopra una clip o specifica il nome.`,
@@ -271,17 +211,7 @@ export function executeClaudePrompt(
 
   // 6. Subtitles / Sottotitoli
   if (text.includes('sottotitol') || text.includes('caption') || text.includes('traduci') || text.includes('lingua')) {
-    const newSubs: SubtitleItem[] = [
-      { id: 'sub_1', startTime: 1.0, endTime: 4.5, text: "Benvenuti in TALEDIT, montaggio video potenziato con Claude MCP." },
-      { id: 'sub_2', startTime: 5.0, endTime: 9.0, text: "Regola maniglie di trasparenza, decibel audio e dissolvenze." },
-      { id: 'sub_3', startTime: 9.5, endTime: 14.0, text: "I comandi vocali e da prompt Claude DT modificano la timeline istantaneamente." }
-    ];
-
-    return {
-      message: `Generati e sincronizzati 3 blocchi di sottotitoli in Italiano per la timeline. Puoi visualizzarli nel pannello centrale Captions e sul Player.`,
-      actionExecuted: `generate_captions(Italian)`,
-      updatedSubtitles: newSubs
-    };
+    return { message: 'Trascrizione automatica non configurata. Nessun sottotitolo è stato generato.', actionExecuted: undefined };
   }
 
   // 7. Delete / Elimina / Cestino

@@ -22,6 +22,10 @@ import {
   TrackType,
 } from './types/editor';
 import { executeClaudePrompt, formatTimecode } from './services/mcpEngine';
+import { importMediaFile } from './services/mediaService';
+import { activeTimelineClips } from './services/timelineMedia';
+import { applyTimelineTool } from './services/timelineTools';
+import { useEditorSync } from './services/useEditorSync';
 
 const INITIAL_TRACKS: Track[] = [
   {
@@ -71,101 +75,18 @@ const INITIAL_TRACKS: Track[] = [
   },
 ];
 
-const INITIAL_CLIPS: TimelineClip[] = [
-  {
-    id: 'clip_effect_1',
-    name: 'Camera Handed',
-    trackId: 'track_effects',
-    type: 'effect',
-    startTime: 4,
-    duration: 8,
-    offset: 0,
-    color: '#cb5c5b',
-    transparency: 100,
-    volumeDb: 0,
-    fadeIn: 1.5,
-    fadeOut: 1.5,
-    effectType: 'camera_shake',
-  },
-  {
-    id: 'clip_video_1',
-    name: 'Intro01.mp4',
-    trackId: 'track_video_1',
-    type: 'video',
-    startTime: 0,
-    duration: 14,
-    offset: 0,
-    color: '#2563eb',
-    transparency: 100,
-    volumeDb: 0,
-    fadeIn: 0,
-    fadeOut: 0,
-    linkedClipId: 'clip_audio_1',
-    isLinked: true,
-    assetId: 'stage_video_1',
-    mediaUrl: '/media_downloads/yt_1792223085761_ebms.mp4',
-  },
-  {
-    id: 'clip_audio_1',
-    name: 'Intro01.mp4 [Audio]',
-    trackId: 'track_audio_1',
-    type: 'audio',
-    startTime: 0,
-    duration: 14,
-    offset: 0,
-    color: '#10b981',
-    transparency: 100,
-    volumeDb: 0,
-    fadeIn: 0,
-    fadeOut: 0,
-    linkedClipId: 'clip_video_1',
-    isLinked: true,
-    assetId: 'stage_video_1',
-    mediaUrl: '/media_downloads/yt_1792223085761_ebms.mp4',
-  },
-  {
-    id: 'clip_image_1',
-    name: 'Overlay_Grafica.png',
-    trackId: 'track_image_1',
-    type: 'image',
-    startTime: 12,
-    duration: 9,
-    offset: 0,
-    color: '#eab308',
-    transparency: 100,
-    volumeDb: 0,
-    fadeIn: 0,
-    fadeOut: 0,
-    assetId: 'stage_image_1',
-  },
-];
-
-const INITIAL_SUBTITLES: SubtitleItem[] = [
-  {
-    id: 'sub_1',
-    startTime: 7.0,
-    endTime: 12.0,
-    text: "Intro01: Benvenuti nel video montato con TALEDIT.",
-    translation: "Welcome to the video edited with TALEDIT.",
-  },
-  {
-    id: 'sub_2',
-    startTime: 12.5,
-    endTime: 18.0,
-    text: "Integrazione attiva tramite Model Context Protocol (MCP).",
-    translation: "Active integration via Model Context Protocol (MCP).",
-  },
-];
+const INITIAL_CLIPS: TimelineClip[] = [];
+const INITIAL_SUBTITLES: SubtitleItem[] = [];
 
 export default function App() {
   // Timeline State
   const [tracks, setTracks] = useState<Track[]>(INITIAL_TRACKS);
   const [clips, setClips] = useState<TimelineClip[]>(INITIAL_CLIPS);
-  const [currentTime, setCurrentTime] = useState<number>(18.0); // 00:18 playhead matching screenshot
-  const [totalDuration, setTotalDuration] = useState<number>(273); // 00:04:33:00 matching screenshot
+  const [currentTime, setCurrentTime] = useState<number>(0); // 00:18 playhead matching screenshot
+  const [totalDuration, setTotalDuration] = useState<number>(30); // 00:04:33:00 matching screenshot
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [selectedClipId, setSelectedClipId] = useState<string | null>('clip_video_1');
-  const [selectedClipIds, setSelectedClipIds] = useState<string[]>(['clip_video_1']);
+  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
+  const [selectedClipIds, setSelectedClipIds] = useState<string[]>([]);
   const [zoom, setZoom] = useState<number>(24);
   const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16' | '1:1' | '4:3'>('16:9');
   const [isMutedMaster, setIsMutedMaster] = useState<boolean>(false);
@@ -183,28 +104,14 @@ export default function App() {
   // Claude DT MCP Integration State
   // User manually decides when to turn ON or OFF as explicitly requested!
   const [claudeConnected, setClaudeConnected] = useState<boolean>(false);
+  const [mcpProvider, setMcpProvider] = useState<'claude' | 'chatgpt'>('claude');
   const [isClaudeDialogOpen, setIsClaudeDialogOpen] = useState<boolean>(false);
   const [isThinking, setIsThinking] = useState<boolean>(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
   const [trackConstraintWarning, setTrackConstraintWarning] = useState<string | null>(null);
 
   // Markers State
-  const [markers, setMarkers] = useState<TimelineMarker[]>([
-    {
-      id: 'marker_1',
-      time: 7.0,
-      name: 'Inizio Intro',
-      description: 'Punto di avvio del video Intro01 e musica di sottofondo',
-      color: '#f59e0b',
-    },
-    {
-      id: 'marker_2',
-      time: 18.0,
-      name: 'Transizione FX',
-      description: 'Dissolvenza effetto Camera Handed e stacco verso seconda inquadratura',
-      color: '#ef4444',
-    },
-  ]);
+  const [markers, setMarkers] = useState<TimelineMarker[]>([]);
 
   // Media Library Assets State
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>(initialMediaAssets);
@@ -229,7 +136,7 @@ export default function App() {
   const mediaFileInputRef = useRef<HTMLInputElement>(null);
 
   // Clipboard & 10-step Undo History (Request #1)
-  const [clipboardClip, setClipboardClip] = useState<TimelineClip | null>(null);
+  const [clipboardClip, setClipboardClip] = useState<TimelineClip[] | null>(null);
   const clipsRef = useRef<TimelineClip[]>(clips);
   useEffect(() => {
     clipsRef.current = clips;
@@ -245,7 +152,7 @@ export default function App() {
       id: 'init_msg_1',
       role: 'claude',
       content:
-        'Benvenuto in TALEDIT con Claude DT MCP! Sono pronto a manipolare la timeline direttamente dai tuoi prompt. Puoi accendere o spegnere il collegamento in qualsiasi momento dal pulsante in alto. Prova a digitare: "Taglia a 00:15", "Imposta trasparenza al 70%" o "Alza volume a +3dB".',
+        'Benvenuto in TALEDIT! La console locale interpreta comandi di montaggio. Claude e ChatGPT si collegano tramite gli endpoint MCP nella scheda di configurazione. Puoi accendere o spegnere il collegamento in qualsiasi momento dal pulsante in alto. Prova a digitare: "Taglia a 00:15", "Imposta trasparenza al 70%" o "Alza volume a +3dB".',
       timestamp: 'Adesso',
     },
   ]);
@@ -272,6 +179,16 @@ export default function App() {
     historyIndexRef.current = newIdx;
     setHistoryCount(newIdx);
   }, []);
+
+  const sharedState = { clips, tracks, subtitles, mediaAssets, currentTime, selectedClipId, aspectRatio };
+  useEditorSync(sharedState, remote => {
+    setClips(remote.clips); clipsRef.current = remote.clips; pushHistory(remote.clips);
+    setTracks(remote.tracks); setSubtitles(remote.subtitles); setMediaAssets(remote.mediaAssets);
+    setCurrentTime(remote.currentTime); setSelectedClipId(remote.selectedClipId);
+    setSelectedClipIds(remote.selectedClipId ? [remote.selectedClipId] : []);
+    setAspectRatio(remote.aspectRatio);
+  }, setClaudeConnected, setTrackConstraintWarning);
+  useEffect(() => { setTotalDuration(Math.max(30, ...clips.map(c => c.startTime + c.duration))); }, [clips]);
 
   // Undo (Ctrl+Z): goes back 1 move, up to 10 moves
   const handleUndo = useCallback(() => {
@@ -312,6 +229,12 @@ export default function App() {
   const handleCommitHistory = useCallback(() => {
     pushHistory(clipsRef.current);
   }, [pushHistory]);
+
+  useEffect(() => {
+    window.addEventListener('pointerup', handleCommitHistory);
+    window.addEventListener('mouseup', handleCommitHistory);
+    return () => { window.removeEventListener('pointerup', handleCommitHistory); window.removeEventListener('mouseup', handleCommitHistory); };
+  }, [handleCommitHistory]);
 
   // Playhead playback timer
   useEffect(() => {
@@ -370,20 +293,24 @@ export default function App() {
   }, [resizingDivider]);
 
   // Duplicate Clip (CTRL+D)
+  const cloneAt = (source: TimelineClip[], time: number) => {
+    if (!source.length) return;
+    const ids = new Map(source.map(c => [c.id, crypto.randomUUID()]));
+    const origin = source[0].startTime;
+    const copies = source.map(c => ({ ...c, id: ids.get(c.id)!, startTime: time + c.startTime - origin,
+      linkedClipId: c.linkedClipId ? ids.get(c.linkedClipId) : undefined, isLinked: Boolean(c.linkedClipId && ids.has(c.linkedClipId)), name: `${c.name} (Copia)` }));
+    const updated = [...clips, ...copies]; setClips(updated); pushHistory(updated);
+    setSelectedClipId(copies[0].id); setSelectedClipIds([copies[0].id]);
+  };
+  const sourcePair = (id: string | null) => {
+    const target = clips.find(c => c.id === id);
+    if (!target) return [];
+    const pair = target.isLinked && clips.find(c => c.id === target.linkedClipId);
+    return pair ? [target, pair] : [target];
+  };
   const handleDuplicateClip = () => {
-    if (!selectedClipId) return;
-    const clip = clips.find(c => c.id === selectedClipId);
-    if (!clip) return;
-    const newClip: TimelineClip = {
-      ...clip,
-      id: `clip_${Date.now()}`,
-      name: `${clip.name} (Duplicato)`,
-      startTime: Math.round((clip.startTime + clip.duration) * 10) / 10,
-    };
-    const updated = [...clips, newClip];
-    setClips(updated);
-    pushHistory(updated);
-    setSelectedClipId(newClip.id);
+    const source = sourcePair(selectedClipId);
+    if (source.length) cloneAt(source, source[0].startTime + source[0].duration);
   };
 
   // Save TAL Project (CTRL+S)
@@ -422,6 +349,7 @@ export default function App() {
       try {
         const content = evt.target?.result as string;
         const data = JSON.parse(content);
+        if (data.appName !== 'TALEDIT' || !Array.isArray(data.tracks) || !Array.isArray(data.clips) || data.tracks.length > 100 || data.clips.length > 200 || data.clips.some((c: any) => !c.id || !['video','audio','image','effect'].includes(c.type) || !Number.isFinite(c.startTime) || c.startTime < 0 || !Number.isFinite(c.duration) || c.duration <= 0)) throw new Error('Progetto TALEDIT non valido.');
         if (data.tracks) setTracks(data.tracks);
         if (data.clips) {
           setClips(data.clips);
@@ -432,52 +360,26 @@ export default function App() {
         if (data.spokenLanguage) setSpokenLanguage(data.spokenLanguage);
         if (data.currentTime !== undefined) setCurrentTime(data.currentTime);
         if (data.mediaAssets) setMediaAssets(data.mediaAssets);
+        if (data.aspectRatio) setAspectRatio(data.aspectRatio);
+        if (data.bilingualCaptions !== undefined) setBilingualCaptions(data.bilingualCaptions);
+        setSelectedClipId(null); setSelectedClipIds([]);
       } catch (err) {
-        console.error('Error loading .tal project:', err);
+        setTrackConstraintWarning((err as Error).message);
       }
     };
     reader.readAsText(file);
+    e.target.value = '';
   };
 
   // Import Media Files into Stage (.mp4, .mov, .avi, .mp3, .wav, .png, .jpg)
-  const handleMediaFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    const allowedExtensions = ['.mp4', '.mov', '.avi', '.mp3', '.wav', '.png', '.jpg', '.jpeg'];
-
-    Array.from(files).forEach(file => {
-      const ext = '.' + file.name.split('.').pop()?.toLowerCase();
-      if (!allowedExtensions.includes(ext)) {
-        const sysErr: ClaudePromptMessage = {
-          id: `sys_err_${Date.now()}`,
-          role: 'system',
-          content: `⚠️ Formato "${ext}" non consentito. Il tasto Import accetta solo file multimediali (.mp4, .mov, .avi, .mp3, .wav, .png, .jpg). I progetti .tal e .json vanno aperti con il tasto "Apri".`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          status: 'error',
-        };
-        setClaudeMessages(prev => [...prev, sysErr]);
-        return;
+  const handleMediaFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []); e.target.value = '';
+    try {
+      for (const file of files) {
+        const asset = await importMediaFile(file);
+        setMediaAssets(prev => [...prev, asset]);
       }
-
-      const type: 'video' | 'audio' | 'image' =
-        file.type.startsWith('video') || ['.mp4', '.mov', '.avi'].includes(ext)
-          ? 'video'
-          : file.type.startsWith('audio') || ['.mp3', '.wav'].includes(ext)
-          ? 'audio'
-          : 'image';
-
-      const sysMsg: ClaudePromptMessage = {
-        id: `sys_${Date.now()}`,
-        role: 'system',
-        content: `File "${file.name}" importato con successo nello STAGE. Puoi trascinarlo o fare doppio clic per inserirlo nella timeline.`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        status: 'success',
-      };
-      setClaudeMessages(prev => [...prev, sysMsg]);
-    });
-
-    e.target.value = '';
+    } catch (error) { setTrackConstraintWarning((error as Error).message); }
   };
 
   // Delete Track and its clips
@@ -505,149 +407,21 @@ export default function App() {
   };
 
   // Drag and drop asset directly from stage files into allowed timeline track
+  const addAsset = (asset: MediaAsset, trackId: string, time: number, preparedTracks = tracks) => {
+    try {
+      const next = applyTimelineTool({ ...sharedState, tracks: preparedTracks }, 'add_clip', { assetId: asset.id, trackId, timeSeconds: Math.max(0, time) });
+      setTracks(next.tracks); setClips(next.clips); pushHistory(next.clips);
+      setSelectedClipId(next.selectedClipId); setSelectedClipIds(next.selectedClipId ? [next.selectedClipId] : []);
+    } catch (error) { setTrackConstraintWarning((error as Error).message); }
+  };
   const handleDropAssetOnTrack = (asset: MediaAsset, trackId: string, dropTime: number) => {
-    const targetTrack = tracks.find(t => t.id === trackId);
-    if (!targetTrack) return;
-
-    // Controllo rigido sui vincoli di traccia
-    if (!isMediaAllowedOnTrack(asset.type, targetTrack.type)) {
-      let warning = '';
-      if (asset.type === 'video') warning = 'I video possono essere inseriti solo nella timeline dei video (traccia blu)!';
-      else if (asset.type === 'audio') warning = 'Gli audio possono essere inseriti solo nella timeline degli audio (traccia verde)!';
-      else if (asset.type === 'image') warning = 'Le immagini possono essere inserite solo nella timeline degli audio!';
-      else if (asset.type === 'effect') warning = 'Gli effetti possono essere inseriti solo nella timeline effetti (traccia rossa)!';
-
-      setTrackConstraintWarning(warning);
-      setTimeout(() => setTrackConstraintWarning(null), 3500);
-
-      const sysErr: ClaudePromptMessage = {
-        id: `sys_err_${Date.now()}`,
-        role: 'system',
-        content: `⚠️ Vincolo traccia: ${warning}`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        status: 'error',
-      };
-      setClaudeMessages(prev => [...prev, sysErr]);
-      return;
-    }
-
-    const duration = asset.durationSec || 12;
-
-    if (asset.type === 'video') {
-      // Quando importi un video inserisce il video nella traccia blu ed il relativo audio nella traccia audio (agganciati insieme)
-      const audioTrack = tracks.find(t => t.type === 'audio') || tracks[3];
-      const now = Date.now();
-      const videoClipId = `clip_v_${now}`;
-      const audioClipId = `clip_a_${now}`;
-
-      const videoClip: TimelineClip = {
-        id: videoClipId,
-        name: asset.name,
-        trackId: targetTrack.id,
-        type: 'video',
-        startTime: dropTime,
-        duration,
-        offset: 0,
-        color: '#2563eb',
-        transparency: 100,
-        volumeDb: 0,
-        fadeIn: 0,
-        fadeOut: 0,
-        linkedClipId: audioClipId,
-        isLinked: true,
-        assetId: asset.id,
-        mediaUrl: asset.fileUrl,
-        mediaThumbnail: asset.thumbnailUrl,
-      };
-
-      const audioClip: TimelineClip = {
-        id: audioClipId,
-        name: `${asset.name} [Audio]`,
-        trackId: audioTrack ? audioTrack.id : 'track_audio_1',
-        type: 'audio',
-        startTime: dropTime,
-        duration,
-        offset: 0,
-        color: '#10b981',
-        transparency: 100,
-        volumeDb: 0,
-        fadeIn: 0,
-        fadeOut: 0,
-        linkedClipId: videoClipId,
-        isLinked: true,
-        assetId: asset.id,
-        mediaUrl: asset.fileUrl,
-      };
-
-      const next = [...clips, videoClip, audioClip];
-      setClips(next);
-      pushHistory(next);
-      setSelectedClipId(videoClipId);
-
-      const sysMsg: ClaudePromptMessage = {
-        id: `sys_${Date.now()}`,
-        role: 'system',
-        content: `Video "${asset.name}" inserito nella traccia Video e relativo audio nella traccia Audio (agganciati insieme).`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        status: 'success',
-      };
-      setClaudeMessages(prev => [...prev, sysMsg]);
-      return;
-    }
-
-    if (asset.type === 'audio') {
-      const newClip: TimelineClip = {
-        id: `clip_${Date.now()}`,
-        name: asset.name,
-        trackId: targetTrack.id,
-        type: 'audio',
-        startTime: dropTime,
-        duration,
-        offset: 0,
-        color: '#10b981',
-        transparency: 100,
-        volumeDb: 0,
-        fadeIn: 0,
-        fadeOut: 0,
-        assetId: asset.id,
-        mediaUrl: asset.fileUrl,
-      };
-      const next = [...clips, newClip];
-      setClips(next);
-      pushHistory(next);
-      setSelectedClipId(newClip.id);
-      return;
-    }
-
-    if (asset.type === 'image') {
-      const newClip: TimelineClip = {
-        id: `clip_${Date.now()}`,
-        name: asset.name,
-        trackId: targetTrack.id,
-        type: 'image',
-        startTime: dropTime,
-        duration,
-        offset: 0,
-        color: '#eab308',
-        transparency: 100,
-        volumeDb: 0,
-        fadeIn: 0,
-        fadeOut: 0,
-        assetId: asset.id,
-        mediaUrl: asset.fileUrl,
-        mediaThumbnail: asset.thumbnailUrl,
-      };
-      const next = [...clips, newClip];
-      setClips(next);
-      pushHistory(next);
-      setSelectedClipId(newClip.id);
-      return;
-    }
+    addAsset(asset, trackId, dropTime);
   };
 
   // Keyboard Shortcuts (CTRL+X, CTRL+C, CTRL+V, CTRL+D, CTRL+S, Space, Delete)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || (e.target instanceof Element && e.target.closest('[data-stage="true"]'))) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
           e.preventDefault();
@@ -697,6 +471,8 @@ export default function App() {
       } else if (isCtrl && e.key.toLowerCase() === 'i') {
         e.preventDefault();
         mediaFileInputRef.current?.click();
+      } else if (isCtrl && e.key.toLowerCase() === 'e') {
+        e.preventDefault(); setIsPlaying(false); setIsExportModalOpen(true);
       } else if (e.code === 'Space') {
         e.preventDefault();
         setIsPlaying(p => !p);
@@ -714,7 +490,9 @@ export default function App() {
   // Toggle Claude Connection manually (User confirmed requirement)
   const handleToggleClaude = () => {
     const nextState = !claudeConnected;
-    setClaudeConnected(nextState);
+    fetch('/api/editor/connection', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: nextState }) })
+      .then(response => { if (!response.ok) throw new Error('Collegamento MCP non modificato.'); setClaudeConnected(nextState); })
+      .catch(error => setTrackConstraintWarning(error.message));
 
     const logMsg: ClaudePromptMessage = {
       id: `conn_${Date.now()}`,
@@ -790,7 +568,11 @@ export default function App() {
 
   // Cut Clip at Playhead
   const handleCutClip = () => {
-    handleSendPrompt('Taglia la clip al playhead');
+    try {
+      const next = applyTimelineTool(sharedState, 'cut_clip_at_time', { timeSeconds: currentTime });
+      setClips(next.clips); pushHistory(next.clips); setSelectedClipId(next.selectedClipId);
+      setSelectedClipIds(next.selectedClipId ? [next.selectedClipId] : []);
+    } catch (error) { setTrackConstraintWarning((error as Error).message); }
   };
 
   // Clip selection (supports single and multi-selection with mouse / Shift / Ctrl / box drag)
@@ -831,6 +613,7 @@ export default function App() {
     if (idsToDelete.length === 0) return;
 
     const idsSet = new Set(idsToDelete);
+    for (const c of clips) if (idsSet.has(c.id) && c.isLinked && c.linkedClipId) idsSet.add(c.linkedClipId);
     const deletedClips = clips.filter(c => idsSet.has(c.id));
     const newClips = clips.filter(c => !idsSet.has(c.id));
     setClips(newClips);
@@ -921,32 +704,16 @@ export default function App() {
   };
 
   // Copy Clip
-  const handleCopyClip = () => {
-    const target = clips.find(c => c.id === selectedClipId);
-    if (target) {
-      setClipboardClip(target);
-    }
-  };
-
-  // Paste Clip
-  const handlePasteClip = () => {
-    if (!clipboardClip) return;
-    const newClip: TimelineClip = {
-      ...clipboardClip,
-      id: `clip_${Date.now()}`,
-      name: `${clipboardClip.name} (Copia)`,
-      startTime: Math.round(currentTime * 10) / 10,
-    };
-    const updated = [...clips, newClip];
-    setClips(updated);
-    pushHistory(updated);
-    setSelectedClipId(newClip.id);
-  };
+  const handleCopyClip = () => { const source = sourcePair(selectedClipId); if (source.length) setClipboardClip(source); };
+  const handlePasteClip = () => { if (clipboardClip) cloneAt(clipboardClip, currentTime); };
 
   // Update specific clip properties
   const handleUpdateClip = (clipId: string, updates: Partial<TimelineClip>) => {
     setClips(prev => {
-      const next = prev.map(c => (c.id === clipId ? { ...c, ...updates } : c));
+      const target = prev.find(c => c.id === clipId);
+      const linkedUpdates = Object.fromEntries(Object.entries(updates).filter(([key]) => ['startTime', 'duration', 'offset'].includes(key)));
+      const next = prev.map(c => c.id === clipId ? { ...c, ...updates } : target?.isLinked && target.linkedClipId === c.id ? { ...c, ...linkedUpdates } : c);
+      clipsRef.current = next;
       return next;
     });
   };
@@ -972,125 +739,15 @@ export default function App() {
 
   // Add media asset from stage library into timeline at exact vertical playhead position (doppio click)
   const handleAddMediaToTimeline = (asset: MediaAsset) => {
-    const playheadTime = Math.max(0, Math.round(currentTime * 10) / 10);
-    const duration = asset.durationSec || 12;
-
-    if (asset.type === 'video') {
-      // 2) I video vanno nella timeline video (blu) ed il relativo audio nella traccia audio (verde) agganciati insieme
-      const videoTrack = tracks.find(t => t.type === 'video') || tracks[1];
-      const audioTrack = tracks.find(t => t.type === 'audio') || tracks[3];
-
-      const now = Date.now();
-      const videoClipId = `clip_v_${now}`;
-      const audioClipId = `clip_a_${now}`;
-
-      const videoClip: TimelineClip = {
-        id: videoClipId,
-        name: asset.name,
-        trackId: videoTrack.id,
-        type: 'video',
-        startTime: playheadTime, // Esattamente nel punto della barra verticale del play (playhead)!
-        duration,
-        offset: 0,
-        color: '#2563eb',
-        transparency: 100,
-        volumeDb: 0,
-        fadeIn: 0,
-        fadeOut: 0,
-        linkedClipId: audioClipId,
-        isLinked: true,
-        assetId: asset.id,
-        mediaUrl: asset.fileUrl,
-        mediaThumbnail: asset.thumbnailUrl,
-      };
-
-      const audioClip: TimelineClip = {
-        id: audioClipId,
-        name: `${asset.name} [Audio]`,
-        trackId: audioTrack ? audioTrack.id : 'track_audio_1',
-        type: 'audio',
-        startTime: playheadTime,
-        duration,
-        offset: 0,
-        color: '#10b981',
-        transparency: 100,
-        volumeDb: 0,
-        fadeIn: 0,
-        fadeOut: 0,
-        linkedClipId: videoClipId,
-        isLinked: true,
-        assetId: asset.id,
-        mediaUrl: asset.fileUrl,
-      };
-
-      const nextClips = [...clips, videoClip, audioClip];
-      setClips(nextClips);
-      pushHistory(nextClips);
-      setSelectedClipId(videoClipId);
-
-      const sysMsg: ClaudePromptMessage = {
-        id: `sys_${Date.now()}`,
-        role: 'system',
-        content: `Video "${asset.name}" posizionato al playhead (${playheadTime}s) su traccia Video (blu) e relativo audio su traccia Audio (verde) agganciati insieme.`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        status: 'success',
-      };
-      setClaudeMessages(prev => [...prev, sysMsg]);
-      return;
+    const type = asset.type === 'image' ? 'audio' : asset.type;
+    let availableTracks = tracks;
+    let track = tracks.find(t => t.type === type);
+    if (!track) {
+      track = { ...INITIAL_TRACKS.find(t => t.type === type)!, id: crypto.randomUUID() };
+      availableTracks = [...availableTracks, track];
     }
-
-    if (asset.type === 'audio') {
-      // 3) Gli audio possono essere inseriti solo nella timeline degli audio
-      const audioTrack = tracks.find(t => t.type === 'audio') || tracks[3];
-      const newClip: TimelineClip = {
-        id: `clip_${Date.now()}`,
-        name: asset.name,
-        trackId: audioTrack.id,
-        type: 'audio',
-        startTime: playheadTime,
-        duration,
-        offset: 0,
-        color: '#10b981',
-        transparency: 100,
-        volumeDb: 0,
-        fadeIn: 0,
-        fadeOut: 0,
-        assetId: asset.id,
-        mediaUrl: asset.fileUrl,
-      };
-      const nextClips = [...clips, newClip];
-      setClips(nextClips);
-      pushHistory(nextClips);
-      setSelectedClipId(newClip.id);
-      return;
-    }
-
-    if (asset.type === 'image') {
-      // 4) Le immagini possono essere inserite solo nella timeline degli audio e non nelle altre
-      const audioTrack = tracks.find(t => t.type === 'audio') || tracks[3];
-      const newClip: TimelineClip = {
-        id: `clip_${Date.now()}`,
-        name: asset.name,
-        trackId: audioTrack.id,
-        type: 'image',
-        startTime: playheadTime,
-        duration,
-        offset: 0,
-        color: '#eab308',
-        transparency: 100,
-        volumeDb: 0,
-        fadeIn: 0,
-        fadeOut: 0,
-        assetId: asset.id,
-        mediaUrl: asset.fileUrl,
-        mediaThumbnail: asset.thumbnailUrl,
-      };
-      const nextClips = [...clips, newClip];
-      setClips(nextClips);
-      pushHistory(nextClips);
-      setSelectedClipId(newClip.id);
-      return;
-    }
+    if (asset.type === 'video' && !availableTracks.some(t => t.type === 'audio')) availableTracks = [...availableTracks, { ...INITIAL_TRACKS.find(t => t.type === 'audio')!, id: crypto.randomUUID() }];
+    addAsset(asset, track.id, currentTime, availableTracks);
   };
 
   // Add new track dynamically
@@ -1151,41 +808,23 @@ export default function App() {
   };
 
   // Generate captions
-  const handleGenerateCaptions = () => {
-    if (deleteCurrentCaptions) {
-      setSubtitles([]);
-    }
-    const newItems: SubtitleItem[] = [
-      {
-        id: `sub_${Date.now()}_1`,
-        startTime: 7.0,
-        endTime: 12.0,
-        text: spokenLanguage === 'Italian'
-          ? "Benvenuti in TALEDIT: il montaggio video intelligente via MCP."
-          : "Welcome to TALEDIT: intelligent video editing via MCP.",
-        translation: spokenLanguage === 'Italian' ? "Welcome to TALEDIT: video editing via MCP." : undefined,
-      },
-      {
-        id: `sub_${Date.now()}_2`,
-        startTime: 12.5,
-        endTime: 18.0,
-        text: spokenLanguage === 'Italian'
-          ? "Ogni traccia ha il suo colore dedicato e maniglie interattive per trasparenza, volume e dissolvenze."
-          : "Each track has its dedicated color and interactive handles for transparency, volume, and fades.",
-        translation: spokenLanguage === 'Italian' ? "Each track has dedicated color and interactive handles." : undefined,
-      },
-      {
-        id: `sub_${Date.now()}_3`,
-        startTime: 18.5,
-        endTime: 24.0,
-        text: spokenLanguage === 'Italian'
-          ? "Puoi scrivere prompt sia da Claude DT che da TALEDIT per modificare tutto in tempo reale."
-          : "You can write prompts from both Claude DT and TALEDIT to modify everything in real time.",
-        translation: spokenLanguage === 'Italian' ? "Write prompts from Claude DT or TALEDIT in real time." : undefined,
-      },
-    ];
-
-    setSubtitles(newItems);
+  const handleGenerateCaptions = async () => {
+    try {
+      const durationSec = Math.max(0, ...clips.map(c => c.startTime + c.duration));
+      const response = await fetch('/api/captions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clips, tracks, durationSec, language: spokenLanguage, bilingual: bilingualCaptions }) });
+      const data = await response.json(); if (!response.ok) throw new Error(data.error);
+      for (;;) {
+        const statusResponse = await fetch(`/api/captions/${data.jobId}`);
+        const job = await statusResponse.json();
+        if (!statusResponse.ok || job.status === 'error') throw new Error(job.error || 'Trascrizione fallita.');
+        if (job.status === 'complete') {
+          setSubtitles(prev => deleteCurrentCaptions ? job.subtitles : [...prev, ...job.subtitles]);
+          if (!job.subtitles.length) setTrackConstraintWarning('Whisper non ha rilevato parlato nella timeline.');
+          return;
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    } catch (error) { setTrackConstraintWarning((error as Error).message); }
   };
 
   const handleUpdateSubtitle = (id: string, text: string) => {
@@ -1196,14 +835,14 @@ export default function App() {
     setSubtitles(prev => prev.filter(s => s.id !== id));
   };
 
-  // Microphone toggle (simulated voice prompting)
   const handleToggleMic = () => {
-    const nextState = !isMicActive;
-    setIsMicActive(nextState);
-    if (nextState) {
-      setIsClaudeDialogOpen(true);
-      handleSendPrompt("Taglia al tempo corrente e alza volume di +2 dB");
-    }
+    const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!Recognition) { setTrackConstraintWarning('Riconoscimento vocale non disponibile in questo browser. Usa la console comandi.'); return; }
+    const recognition = new Recognition(); recognition.lang = 'it-IT';
+    recognition.onresult = (event: any) => handleSendPrompt(event.results[0][0].transcript);
+    recognition.onend = () => setIsMicActive(false);
+    recognition.onerror = () => { setIsMicActive(false); setTrackConstraintWarning('Microfono non disponibile o accesso negato.'); };
+    recognition.start(); setIsMicActive(true);
   };
 
   const selectedClip = clips.find(c => c.id === selectedClipId) || null;
@@ -1223,7 +862,7 @@ export default function App() {
       <input
         ref={mediaFileInputRef}
         type="file"
-        accept=".mp4,.mov,.avi,.mp3,.wav,.png,.jpg,.jpeg,video/mp4,video/quicktime,video/x-msvideo,audio/mpeg,audio/wav,image/png,image/jpeg"
+        accept="video/*,audio/*,image/png,image/jpeg,image/webp,.mkv"
         multiple
         onChange={handleMediaFileImport}
         className="hidden"
@@ -1233,7 +872,8 @@ export default function App() {
       <TopNav
         claudeConnected={claudeConnected}
         onToggleClaude={handleToggleClaude}
-        onOpenClaudeDialog={handleOpenClaudeDialog}
+        onOpenClaudeDialog={() => { setMcpProvider('claude'); handleOpenClaudeDialog(); }}
+        onOpenChatGPT={() => { setMcpProvider('chatgpt'); setIsClaudeDialogOpen(true); }}
         onCut={handleCutClip}
         onDelete={handleDeleteClip}
         onUndo={handleUndo}
@@ -1243,7 +883,7 @@ export default function App() {
         onOpenProject={() => talFileInputRef.current?.click()}
         onImport={() => mediaFileInputRef.current?.click()}
         onSave={handleSaveTalProject}
-        onExport={() => setIsExportModalOpen(true)}
+        onExport={() => { setIsPlaying(false); setIsExportModalOpen(true); }}
         onAddMarker={() => handleAddMarker(currentTime)}
         markerCount={markers.length}
         activeTab={activeTab}
@@ -1337,8 +977,8 @@ export default function App() {
               onSeek={t => setCurrentTime(t)}
               aspectRatio={aspectRatio}
               setAspectRatio={setAspectRatio}
-              clips={clips}
-              subtitles={subtitles}
+              clips={activeTimelineClips(clips, tracks)}
+              subtitles={subtitles.map(s => bilingualCaptions && s.translation ? { ...s, text: `${s.text}\n${s.translation}` } : s)}
               isMuted={isMutedMaster}
               onToggleMute={() => setIsMutedMaster(m => !m)}
             />
@@ -1411,6 +1051,7 @@ export default function App() {
 
       {/* 4. Claude DT MCP Dialog Window */}
       <ClaudeMCPDialog
+        provider={mcpProvider}
         isOpen={isClaudeDialogOpen}
         onClose={() => setIsClaudeDialogOpen(false)}
         claudeConnected={claudeConnected}
@@ -1426,13 +1067,13 @@ export default function App() {
         onClose={() => setIsExportModalOpen(false)}
         clips={clips}
         tracks={tracks}
-        subtitles={subtitles}
+        subtitles={subtitles.map(s => bilingualCaptions && s.translation ? { ...s, text: `${s.text}\n${s.translation}` } : s)}
         aspectRatio={aspectRatio}
       />
 
       {/* Floating Track Constraint Warning Toast */}
       {trackConstraintWarning && (
-        <div className="fixed bottom-12 left-1/2 -translate-x-1/2 bg-[#4c0519] border-2 border-rose-500 text-rose-100 px-5 py-2.5 rounded-lg shadow-2xl z-50 flex items-center gap-2.5 text-xs font-bold animate-in fade-in slide-in-from-bottom-2">
+        <div role="alert" onClick={() => setTrackConstraintWarning(null)} className="fixed bottom-12 left-1/2 -translate-x-1/2 bg-[#4c0519] border-2 border-rose-500 text-rose-100 px-5 py-2.5 rounded-lg shadow-2xl z-50 flex items-center gap-2.5 text-xs font-bold animate-in fade-in slide-in-from-bottom-2">
           <span className="text-base">⛔</span>
           <span>{trackConstraintWarning}</span>
         </div>

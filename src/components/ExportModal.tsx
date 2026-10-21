@@ -20,7 +20,7 @@ import {
   executeProjectExport,
   ExportProgress
 } from '../services/exportService';
-import { playbackEngine } from '../services/playbackEngine';
+import { PlaybackEngine, playbackEngine } from '../services/playbackEngine';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -43,6 +43,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const [resolution, setResolution] = useState<'1080p' | '720p' | '4K'>('1080p');
   // Horizontal slider for file weight/bitrate (1 = lightest, 100 = heaviest/max quality)
   const [weightPercentage, setWeightPercentage] = useState<number>(55);
+  const [exportError, setExportError] = useState('');
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [progress, setProgress] = useState<ExportProgress | null>(null);
   const [exportedResult, setExportedResult] = useState<{
@@ -55,9 +56,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
   // Content duration
   const contentDuration = useMemo(() => {
-    if (clips.length === 0) return 8;
+    if (clips.length === 0) return 0;
     const maxEnd = Math.max(...clips.map(c => c.startTime + c.duration));
-    return Math.max(2, Math.ceil(maxEnd));
+    return maxEnd;
   }, [clips]);
 
   // Dynamic file size and bitrate calculation based on horizontal slider
@@ -77,6 +78,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         id: c.id,
         name: c.name,
         transparency: c.transparency,
+        layer: clips.indexOf(c),
         startTime: c.startTime,
         duration: c.duration,
         offset: c.offset,
@@ -101,6 +103,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         id: c.id,
         name: c.name,
         transparency: c.transparency,
+        layer: clips.indexOf(c),
         startTime: c.startTime,
         duration: c.duration,
         mediaUrl: c.mediaUrl,
@@ -114,7 +117,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
     // Draw first frame preview
     const previewStartTime = videoClips.length > 0 ? videoClips[0].startTime : 0;
-    playbackEngine.prepareAndRenderFrame(canvas, previewStartTime, videoClips, effectClips, imageClips, subItems);
+    const previewEngine = new PlaybackEngine();
+    previewEngine.prepareAndRenderFrame(canvas, previewStartTime, videoClips, effectClips, imageClips, subItems);
+    return () => previewEngine.dispose();
   }, [isOpen, clips, subtitles]);
 
   if (!isOpen) return null;
@@ -126,6 +131,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     if (!canvas) return;
 
     setIsExporting(true);
+    setExportError('');
     setExportedResult(null);
 
     try {
@@ -135,16 +141,19 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           resolution,
           weightPercentage,
           durationSec: contentDuration,
+          aspectRatio,
         },
         clips,
         subtitles,
         canvas,
-        p => setProgress(p)
+        p => setProgress(p),
+        tracks
       );
 
       setExportedResult(result);
     } catch (err) {
-      console.error('Export error:', err);
+      setExportError((err as Error).message);
+      setProgress(null);
     } finally {
       setIsExporting(false);
     }
@@ -195,7 +204,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             </div>
             <div>
               <h3 className="font-bold text-sm text-cyan-300">Esporta Video ed Audio TALEDIT</h3>
-              <p className="text-[10px] text-gray-400">Rendering reale con anteprima visiva in tempo reale e controllo peso file</p>
+              <p className="text-[10px] text-gray-400">Codifica FFmpeg con anteprima e controllo peso file</p>
             </div>
           </div>
           <button
@@ -220,7 +229,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             {isExporting && (
               <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-rose-600/90 text-white font-mono text-[10px] font-bold flex items-center gap-1.5 shadow">
                 <span className="w-2 h-2 rounded-full bg-white animate-ping" />
-                <span>REC • LIVE ANTEPRIMA</span>
+                <span>CODIFICA IN CORSO</span>
               </div>
             )}
             <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/80 text-gray-300 font-mono text-[10px] border border-white/10">
@@ -228,6 +237,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             </div>
           </div>
 
+          {exportError && <p role="alert" className="text-rose-300 border border-rose-700 rounded p-2">{exportError}</p>}
           {!exportedResult ? (
             <>
               {/* 1. Formato file selector (mp4, avi, mov, mp3, wav) */}
@@ -369,7 +379,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 <button
                   type="button"
                   onClick={handleStartExport}
-                  disabled={isExporting}
+                  disabled={isExporting || clips.length === 0}
                   className="w-full py-2.5 px-4 bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 disabled:opacity-50 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-cyan-950/50 cursor-pointer"
                 >
                   {isExporting ? (

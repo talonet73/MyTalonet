@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sparkles,
   Send,
@@ -17,6 +17,7 @@ import { ClaudePromptMessage } from '../types/editor';
 import { getClaudeDesktopConfigJson, CLAUDE_MCP_CONFIG } from '../services/mcpEngine';
 
 interface ClaudeMCPDialogProps {
+  provider?: 'claude' | 'chatgpt';
   isOpen: boolean;
   onClose: () => void;
   claudeConnected: boolean;
@@ -27,6 +28,7 @@ interface ClaudeMCPDialogProps {
 }
 
 export const ClaudeMCPDialog: React.FC<ClaudeMCPDialogProps> = ({
+  provider = 'claude',
   isOpen,
   onClose,
   claudeConnected,
@@ -36,8 +38,10 @@ export const ClaudeMCPDialog: React.FC<ClaudeMCPDialogProps> = ({
   isThinking,
 }) => {
   const [inputText, setInputText] = useState('');
-  const [activeTab, setActiveTab] = useState<'prompt' | 'mcp_setup' | 'tools'>('prompt');
+  const [activeTab, setActiveTab] = useState<'prompt' | 'mcp_setup' | 'tools' | 'chatgpt'>('prompt');
   const [copiedConfig, setCopiedConfig] = useState(false);
+
+  useEffect(() => { if (isOpen) setActiveTab(provider === 'chatgpt' ? 'chatgpt' : 'prompt'); }, [isOpen, provider]);
 
   if (!isOpen) return null;
 
@@ -62,7 +66,7 @@ export const ClaudeMCPDialog: React.FC<ClaudeMCPDialogProps> = ({
     "Imposta trasparenza del video al 75%",
     "Alza il volume dell'audio a +3 dB",
     "Applica dissolvenza di 2 secondi all'effetto Camera Handed",
-    "Genera sottotitoli in Italiano",
+
     "Aggiungi effetto Glitch Cyber a 00:20"
   ];
 
@@ -77,11 +81,11 @@ export const ClaudeMCPDialog: React.FC<ClaudeMCPDialogProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-bold text-sm text-white">Claude Desktop • MCP Bridge</h3>
+                <h3 className="font-bold text-sm text-white">Claude / ChatGPT • MCP Bridge</h3>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                   claudeConnected ? 'bg-emerald-950 text-emerald-400 border border-emerald-700' : 'bg-gray-800 text-gray-400'
                 }`}>
-                  {claudeConnected ? 'COLLEGAMENTO ATTIVO' : 'DISCONNESSO'}
+                  {claudeConnected ? 'MCP ABILITATO' : 'MCP SPENTO'}
                 </span>
               </div>
               <p className="text-[11px] text-gray-400">
@@ -157,6 +161,15 @@ export const ClaudeMCPDialog: React.FC<ClaudeMCPDialogProps> = ({
           </button>
         </div>
 
+        <button onClick={() => setActiveTab('chatgpt')} className="text-xs px-4 py-2 text-emerald-300 bg-emerald-950/40">Configura ChatGPT MCP</button>
+        {activeTab === 'chatgpt' && <div className="p-5 overflow-y-auto text-xs space-y-3">
+          <h4 className="font-bold text-emerald-300 text-sm">Collega ChatGPT a TALEDIT</h4>
+          <p>In ChatGPT, apri le impostazioni delle app e abilita la modalità sviluppatore se disponibile nel tuo account. Crea un’app MCP con questo URL:</p>
+          <code className="block p-3 rounded bg-black/50 text-emerald-300 break-all">{currentHost}/api/mcp</code>
+          <p>ChatGPT deve poter raggiungere un indirizzo HTTPS pubblico del server TALEDIT. Un indirizzo localhost non è raggiungibile da ChatGPT. Attiva il collegamento MCP in questa finestra prima di usare gli strumenti.</p>
+          <p>Il server supporta Streamable HTTP. La connessione usa l’autenticazione configurata dal gestore del server; in locale nessun token è richiesto. Per pubblicarlo, proteggi l’accesso e configura MCP_AUTH_TOKEN o un gateway OAuth compatibile con il client.</p>
+          <p>Prova: “Leggi lo stato della timeline”, poi “Taglia la clip selezionata a 3 secondi”. Le modifiche compaiono nell’editor. Il pulsante ON abilita gli strumenti: la connessione del client avviene in ChatGPT.</p>
+        </div>}
         {/* Tab 1: Interactive Prompt Console */}
         {activeTab === 'prompt' && (
           <div className="flex-1 flex flex-col p-4 overflow-hidden">
@@ -211,7 +224,7 @@ export const ClaudeMCPDialog: React.FC<ClaudeMCPDialogProps> = ({
                       <span className="font-sans font-bold text-gray-300">Tu (Prompt)</span>
                     ) : (
                       <span className="font-sans font-bold text-amber-400 flex items-center gap-1">
-                        <Sparkles className="w-3 h-3" /> Claude DT (MCP)
+                        <Sparkles className="w-3 h-3" /> Console locale
                       </span>
                     )}
                     <span>• {msg.timestamp}</span>
@@ -239,7 +252,7 @@ export const ClaudeMCPDialog: React.FC<ClaudeMCPDialogProps> = ({
               {isThinking && (
                 <div className="flex items-center gap-2 text-xs text-amber-400 p-2">
                   <div className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-                  <span>Claude DT sta elaborando la modifica video via MCP...</span>
+                  <span>Esecuzione del comando locale…</span>
                 </div>
               )}
             </div>
@@ -274,7 +287,7 @@ export const ClaudeMCPDialog: React.FC<ClaudeMCPDialogProps> = ({
                 Integrazione Diretta con Claude Desktop (Claude DT)
               </h4>
               <p className="text-gray-300 leading-relaxed">
-                Puoi impartire comandi a TALEDIT sia da questa finestra di dialogo che dall'applicazione ufficiale <strong>Claude Desktop</strong>.
+                La console interna usa comandi locali. Puoi collegare anche l’applicazione ufficiale <strong>Claude Desktop</strong>.
                 TALEDIT espone un endpoint standard MCP su protocollo SSE:
               </p>
               <div className="mt-2 font-mono text-[11px] bg-black/60 p-2 rounded text-cyan-300 border border-cyan-900/40">

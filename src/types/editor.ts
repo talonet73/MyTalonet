@@ -49,6 +49,9 @@ export interface MediaAsset {
   durationSec: number;
   thumbnailUrl?: string;
   fileUrl?: string;
+  hasAudio?: boolean;
+  width?: number;
+  height?: number;
   isLost?: boolean;
   downloadProgress?: number; // 0 to 100 (%)
   isDownloading?: boolean;

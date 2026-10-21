@@ -10,7 +10,7 @@ interface CaptionsPanelProps {
   deleteCurrentCaptions: boolean;
   setDeleteCurrentCaptions: (del: boolean) => void;
   subtitles: SubtitleItem[];
-  onGenerateCaptions: () => void;
+  onGenerateCaptions: () => Promise<void>;
   onUpdateSubtitle: (id: string, text: string) => void;
   onDeleteSubtitle: (id: string) => void;
 }
@@ -29,12 +29,9 @@ export const CaptionsPanel: React.FC<CaptionsPanelProps> = ({
 }) => {
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     setIsGenerating(true);
-    setTimeout(() => {
-      onGenerateCaptions();
-      setIsGenerating(false);
-    }, 600);
+    try { await onGenerateCaptions(); } finally { setIsGenerating(false); }
   };
 
   return (
@@ -63,9 +60,9 @@ export const CaptionsPanel: React.FC<CaptionsPanelProps> = ({
         {/* Bilingual Captions Switch */}
         <div className="flex items-center justify-between py-2 border-b border-[#232c40] mb-3">
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-200">Bilingual captions</span>
+            <span className="text-xs text-gray-200">Traduzione in inglese</span>
             <span className="text-[10px] bg-gradient-to-r from-amber-500 to-yellow-400 text-black font-extrabold px-1.5 py-0.2 rounded">
-              Pro
+              Locale
             </span>
           </div>
           <button

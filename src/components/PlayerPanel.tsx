@@ -57,12 +57,14 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
       id: c.id,
       name: c.name,
       transparency: c.transparency,
+      volumeDb: c.volumeDb,
+      layer: clips.indexOf(c),
       startTime: c.startTime,
       duration: c.duration,
       offset: c.offset,
       mediaUrl: c.mediaUrl,
-      hasSeparateAudioClip: clips.some(
-        other => other.type === 'audio' && (other.linkedClipId === c.id || other.name.startsWith(c.name))
+      hasSeparateAudioClip: Boolean(c.linkedClipId) || clips.some(
+        other => other.type === 'audio' && other.linkedClipId === c.id
       )
     }));
 
@@ -96,6 +98,8 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
       id: c.id,
       name: c.name,
       transparency: c.transparency,
+      volumeDb: c.volumeDb,
+      layer: clips.indexOf(c),
       startTime: c.startTime,
       duration: c.duration,
       mediaUrl: c.mediaUrl,
@@ -108,6 +112,7 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
         playbackEngine.renderFrame(canvasRef.current, currentTime, videoClips, effectClips, imageClips, subtitles);
       }
     });
+    return () => playbackEngine.setOnFrameReady(null);
   }, [currentTime, videoClips, effectClips, imageClips, subtitles]);
 
   // Sync real media elements (video, audio) and draw frame
@@ -160,8 +165,8 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
         <div className={`relative ${aspectClass} w-full max-w-full flex items-center justify-center shadow-2xl rounded border border-[#1e293b] bg-black overflow-hidden`}>
           <canvas
             ref={canvasRef}
-            width={640}
-            height={360}
+            width={aspectRatio === '9:16' ? 360 : aspectRatio === '1:1' ? 360 : aspectRatio === '4:3' ? 480 : 640}
+            height={aspectRatio === '9:16' ? 640 : 360}
             className="w-full h-full object-contain"
           />
 

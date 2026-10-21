@@ -14,6 +14,8 @@ export interface VideoClipData {
   offset?: number;
   mediaUrl?: string;
   hasSeparateAudioClip?: boolean;
+  volumeDb?: number;
+  layer?: number;
 }
 
 export interface AudioClipData {
@@ -37,6 +39,7 @@ export interface EffectClipData {
 }
 
 export interface ImageClipData {
+  layer?: number;
   id: string;
   name: string;
   transparency: number;
@@ -51,460 +54,133 @@ export interface SubtitleData {
   endTime: number;
 }
 
-class PlaybackEngine {
-  private videoCache: Map<string, HTMLVideoElement> = new Map();
-  private audioCache: Map<string, HTMLAudioElement> = new Map();
-  private imageCache: Map<string, HTMLImageElement> = new Map();
-  private onFrameReadyCallback: (() => void) | null = null;
-
-  public setOnFrameReady(callback: () => void) {
-    this.onFrameReadyCallback = callback;
-  }
-
-  public getVideoElement(url: string): HTMLVideoElement {
-    if (!this.videoCache.has(url)) {
-      const v = document.createElement('video');
-      // Blob URLs should not have crossOrigin set as it can cause security/loading errors
-      if (!url.startsWith('blob:')) {
-        v.crossOrigin = 'anonymous';
-      }
-      v.playsInline = true;
-      v.preload = 'auto';
-      v.src = url;
-      v.muted = true; // Video element is muted by default; audio handled through dedicated audio sync
-      v.addEventListener('seeked', () => {
-        if (this.onFrameReadyCallback) this.onFrameReadyCallback();
-      });
-      v.addEventListener('loadeddata', () => {
-        if (this.onFrameReadyCallback) this.onFrameReadyCallback();
-      });
-      v.addEventListener('canplay', () => {
-        if (this.onFrameReadyCallback) this.onFrameReadyCallback();
-      });
-      v.addEventListener('timeupdate', () => {
-        if (this.onFrameReadyCallback) this.onFrameReadyCallback();
-      });
-      try {
-        v.load();
-      } catch (e) {
-        // ignore
-      }
-      this.videoCache.set(url, v);
+export class PlaybackEngine {
+  private videoCache = new Map<string, HTMLVideoElement>();
+  private audioCache = new Map<string, HTMLAudioElement>();
+  private imageCache = new Map<string, HTMLImageElement>();
+  private audioContext: AudioContext | null = null;
+  private gains = new Map<HTMLMediaElement, GainNode>();
+  private onFrameReady: (() => void) | null = null;
+  private notify = () => this.onFrameReady?.();
+  public setOnFrameReady(callback: (() => void) | null) { this.onFrameReady = callback; }
+  public getVideoElement(url: string, key = url) {
+    let element = this.videoCache.get(key);
+    if (element && element.getAttribute('src') !== url) { element.pause(); element.src = url; }
+    if (!element) {
+      element = document.createElement('video');
+      element.crossOrigin = 'anonymous'; element.playsInline = true; element.preload = 'auto'; element.muted = true;
+      for (const event of ['loadeddata','seeked','canplay','timeupdate']) element.addEventListener(event, this.notify);
+      element.src = url; this.videoCache.set(key, element);
     }
-    return this.videoCache.get(url)!;
+    return element;
   }
-
-  /**
-   * Preloads all video assets in clips to guarantee frames are immediately decodeable
-   */
-  public async preloadVideos(videoClips: VideoClipData[]): Promise<void> {
-    const promises = videoClips.map(c => {
-      if (!c.mediaUrl) return Promise.resolve();
-      const v = this.getVideoElement(c.mediaUrl);
-      if (v.readyState >= 2 && v.videoWidth > 0) return Promise.resolve();
-
-      return new Promise<void>(resolve => {
-        let isDone = false;
-        const onDone = () => {
-          if (isDone) return;
-          isDone = true;
-          v.removeEventListener('loadeddata', onDone);
-          v.removeEventListener('canplay', onDone);
-          v.removeEventListener('error', onDone);
-          resolve();
-        };
-        v.addEventListener('loadeddata', onDone);
-        v.addEventListener('canplay', onDone);
-        v.addEventListener('error', onDone);
-        try {
-          v.load();
-        } catch (e) {
-          resolve();
-        }
-        setTimeout(onDone, 1500); // 1.5s timeout safety
-      });
-    });
-
-    await Promise.all(promises);
+  public getAudioElement(url: string, key = url) {
+    let element = this.audioCache.get(key);
+    if (element && element.getAttribute('src') !== url) { element.pause(); element.src = url; }
+    if (!element) { element = new Audio(); element.crossOrigin = 'anonymous'; element.preload = 'auto'; element.src = url; this.audioCache.set(key, element); }
+    return element;
   }
-
-  public getAudioElement(url: string): HTMLAudioElement {
-    if (!this.audioCache.has(url)) {
-      const a = new Audio();
-      a.crossOrigin = 'anonymous';
-      a.preload = 'auto';
-      a.src = url;
-      this.audioCache.set(url, a);
-    }
-    return this.audioCache.get(url)!;
+  public getImageElement(url: string) {
+    let image = this.imageCache.get(url);
+    if (!image) { image = new Image(); image.crossOrigin = 'anonymous'; image.onload = this.notify; image.src = url; this.imageCache.set(url, image); }
+    return image;
   }
-
-  public getImageElement(url: string): HTMLImageElement {
-    if (!this.imageCache.has(url)) {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.src = url;
-      img.onload = () => {
-        if (this.onFrameReadyCallback) this.onFrameReadyCallback();
-      };
-      this.imageCache.set(url, img);
-    }
-    return this.imageCache.get(url)!;
+  private gain(element: HTMLMediaElement, db: number, muted: boolean, playing: boolean) {
+    // Do not create an AudioContext until the user starts playback.
+    if (!playing) return;
+    if (!this.audioContext) this.audioContext = new AudioContext();
+    let gain = this.gains.get(element);
+    if (!gain) { gain = this.audioContext.createGain(); this.audioContext.createMediaElementSource(element).connect(gain); gain.connect(this.audioContext.destination); this.gains.set(element, gain); }
+    gain.gain.value = muted || db <= -60 ? 0 : Math.pow(10, db / 20);
+    if (this.audioContext.state === 'suspended') void this.audioContext.resume();
   }
-
-  /**
-   * Sync active media playback with timeline state
-   */
-  public syncMedia(
-    currentTime: number,
-    isPlaying: boolean,
-    videoClips: VideoClipData[],
-    audioClips: AudioClipData[],
-    isMutedMaster: boolean
-  ) {
-    // 1. Sync Active Video
-    const activeVideo = videoClips.find(
-      v => currentTime >= v.startTime && currentTime <= v.startTime + v.duration
-    );
-
-    const activeVideoUrls = new Set<string>();
-    if (activeVideo && activeVideo.mediaUrl) {
-      activeVideoUrls.add(activeVideo.mediaUrl);
-      const vEl = this.getVideoElement(activeVideo.mediaUrl);
-      const targetTime = Math.max(0, (currentTime - activeVideo.startTime) + (activeVideo.offset || 0));
-
-      if (vEl.duration && targetTime >= vEl.duration) {
-        vEl.pause();
-      } else {
-        if (Math.abs(vEl.currentTime - targetTime) > 0.15) {
-          try {
-            vEl.currentTime = targetTime;
-          } catch (e) {
-            // ignore seek error
-          }
-        }
-
-        // If this video has NO separate audio clip on the timeline, play audio directly from video
-        if (!activeVideo.hasSeparateAudioClip) {
-          vEl.muted = isMutedMaster;
-        } else {
-          vEl.muted = true; // Audio is handled by the audio clip!
-        }
-
-        if (isPlaying) {
-          if (vEl.paused) {
-            vEl.play().catch(() => {});
-          }
-        } else {
-          if (!vEl.paused) {
-            vEl.pause();
-          }
-        }
-      }
+  public syncMedia(time: number, playing: boolean, videos: VideoClipData[], audios: AudioClipData[], muted: boolean) {
+    const videoIds = new Set<string>(), audioIds = new Set<string>();
+    const sync = (element: HTMLMediaElement, target: number) => {
+      if (Number.isFinite(element.duration) && target >= element.duration) { element.pause(); return; }
+      if (!element.seeking && Math.abs(element.currentTime - target) > (playing ? .15 : .015)) element.currentTime = target;
+      if (playing && element.paused) void element.play().catch(() => {});
+      if (!playing && !element.paused) element.pause();
+    };
+    for (const clip of videos) if (clip.mediaUrl && time >= clip.startTime && time < clip.startTime + clip.duration) {
+      videoIds.add(clip.id); const element = this.getVideoElement(clip.mediaUrl, clip.id);
+      element.muted = muted || Boolean(clip.hasSeparateAudioClip);
+      if (!clip.hasSeparateAudioClip) this.gain(element, clip.volumeDb || 0, muted, playing);
+      sync(element, Math.max(0, time - clip.startTime + (clip.offset || 0)));
     }
-
-    // Pause all other video elements
-    this.videoCache.forEach((vEl, url) => {
-      if (!activeVideoUrls.has(url)) {
-        if (!vEl.paused) vEl.pause();
-      }
-    });
-
-    // 2. Sync Active Audio Clips
-    const activeAudio = audioClips.find(
-      a => currentTime >= a.startTime && currentTime <= a.startTime + a.duration
-    );
-    const activeAudioUrls = new Set<string>();
-
-    if (activeAudio && activeAudio.mediaUrl) {
-      activeAudioUrls.add(activeAudio.mediaUrl);
-      const aEl = this.getAudioElement(activeAudio.mediaUrl);
-      const targetTime = Math.max(0, (currentTime - activeAudio.startTime) + (activeAudio.offset || 0));
-
-      // Calculate linear gain from dB: 0 dB = 1.0, -60 dB = 0
-      const linearGain = Math.max(0, Math.min(1, Math.pow(10, activeAudio.volumeDb / 20)));
-      aEl.volume = (isMutedMaster || activeAudio.volumeDb <= -55) ? 0 : linearGain;
-
-      if (aEl.duration && targetTime >= aEl.duration) {
-        aEl.pause();
-      } else {
-        if (Math.abs(aEl.currentTime - targetTime) > 0.15) {
-          try {
-            aEl.currentTime = targetTime;
-          } catch (e) {
-            // ignore
-          }
-        }
-
-        if (isPlaying) {
-          if (aEl.paused) {
-            aEl.play().catch(() => {});
-          }
-        } else {
-          if (!aEl.paused) {
-            aEl.pause();
-          }
-        }
-      }
+    for (const clip of audios) if (clip.mediaUrl && time >= clip.startTime && time < clip.startTime + clip.duration) {
+      audioIds.add(clip.id); const element = this.getAudioElement(clip.mediaUrl, clip.id);
+      element.muted = muted; this.gain(element, clip.volumeDb, muted, playing);
+      sync(element, Math.max(0, time - clip.startTime + (clip.offset || 0)));
     }
-
-    // Pause all other audio elements
-    this.audioCache.forEach((aEl, url) => {
-      if (!activeAudioUrls.has(url)) {
-        if (!aEl.paused) aEl.pause();
-      }
+    for (const [key, element] of this.videoCache) if (!videoIds.has(key)) element.pause();
+    for (const [key, element] of this.audioCache) if (!audioIds.has(key)) element.pause();
+  }
+  private async waitFor(element: HTMLMediaElement, event: string, ready: () => boolean) {
+    if (ready()) return;
+    await new Promise<void>(resolve => {
+      const done = () => { clearTimeout(timer); element.removeEventListener(event, done); element.removeEventListener('error', done); resolve(); };
+      const timer = setTimeout(done, 10000);
+      element.addEventListener(event, done); element.addEventListener('error', done);
     });
   }
-
-  public pauseAll() {
-    this.videoCache.forEach(v => {
-      if (!v.paused) v.pause();
-    });
-    this.audioCache.forEach(a => {
-      if (!a.paused) a.pause();
-    });
+  public async preloadVideos(videos: VideoClipData[]) {
+    await Promise.all(videos.filter(c => c.mediaUrl).map(c => { const element = this.getVideoElement(c.mediaUrl!, c.id); return this.waitFor(element, 'loadeddata', () => element.readyState >= 2 || Boolean(element.error)); }));
   }
-
-  /**
-   * Prepares video element position and waits for seek before rendering.
-   * Crucial for offline/export rendering so that real video frames are decoded!
-   */
-  public async prepareAndRenderFrame(
-    canvas: HTMLCanvasElement,
-    timeSec: number,
-    videoClips: VideoClipData[],
-    effectClips: EffectClipData[],
-    imageClips: ImageClipData[],
-    subtitles: SubtitleData[]
-  ): Promise<void> {
-    const activeVideo = videoClips.find(v => timeSec >= v.startTime && timeSec <= v.startTime + v.duration);
-    if (activeVideo && activeVideo.mediaUrl) {
-      const vEl = this.getVideoElement(activeVideo.mediaUrl);
-      if (vEl.readyState === 0) {
-        try {
-          vEl.load();
-        } catch (e) {
-          // ignore
-        }
-      }
-
-      const targetTime = Math.max(0, (timeSec - activeVideo.startTime) + (activeVideo.offset || 0));
-      const dur = vEl.duration && Number.isFinite(vEl.duration) ? vEl.duration : targetTime;
-      const clampedTarget = Math.min(dur, targetTime);
-
-      if (Math.abs(vEl.currentTime - clampedTarget) > 0.03) {
-        try {
-          vEl.currentTime = clampedTarget;
-          // Wait for seek to complete (with timeout safety)
-          await new Promise<void>(resolve => {
-            let resolved = false;
-            const onSeeked = () => {
-              if (resolved) return;
-              resolved = true;
-              vEl.removeEventListener('seeked', onSeeked);
-              resolve();
-            };
-            vEl.addEventListener('seeked', onSeeked, { once: true });
-            setTimeout(() => {
-              if (!resolved) {
-                resolved = true;
-                vEl.removeEventListener('seeked', onSeeked);
-                resolve();
-              }
-            }, 85);
-          });
-        } catch (e) {
-          // ignore
-        }
-      }
-    }
-
-    this.renderFrame(canvas, timeSec, videoClips, effectClips, imageClips, subtitles);
+  public async prepareAndRenderFrame(canvas: HTMLCanvasElement, time: number, videos: VideoClipData[], effects: EffectClipData[], images: ImageClipData[], subtitles: SubtitleData[]) {
+    const active = videos.filter(v => time >= v.startTime && time < v.startTime + v.duration);
+    await this.preloadVideos(active);
+    await Promise.all(active.filter(c => c.mediaUrl).map(async c => {
+      const element = this.getVideoElement(c.mediaUrl!, c.id);
+      const target = Math.min(Math.max(0, element.duration - .001), time - c.startTime + (c.offset || 0));
+      if (Number.isFinite(target) && Math.abs(element.currentTime - target) > .015) { element.currentTime = target; await this.waitFor(element, 'seeked', () => !element.seeking); }
+    }));
+    await Promise.all(images.filter(c => c.mediaUrl).map(c => this.getImageElement(c.mediaUrl!).decode().catch(() => {})));
+    this.renderFrame(canvas, time, videos, effects, images, subtitles);
   }
-
-  /**
-   * Render composite frame onto canvas:
-   * Real video frame -> Real image -> Effects (shake, alpha, overlay) -> Subtitles
-   */
-  public renderFrame(
-    canvas: HTMLCanvasElement,
-    timeSec: number,
-    videoClips: VideoClipData[],
-    effectClips: EffectClipData[],
-    imageClips: ImageClipData[],
-    subtitles: SubtitleData[]
-  ) {
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const width = canvas.width;
-    const height = canvas.height;
-
-    // Clear background
-    ctx.fillStyle = '#0a0f1d';
-    ctx.fillRect(0, 0, width, height);
-
-    const activeVideo = videoClips.find(v => timeSec >= v.startTime && timeSec <= v.startTime + v.duration);
-    const activeImage = imageClips.find(img => timeSec >= img.startTime && timeSec <= img.startTime + img.duration);
-    const activeEffect = effectClips.find(e => timeSec >= e.startTime && timeSec <= e.startTime + e.duration);
-
-    let shakeX = 0;
-    let shakeY = 0;
-    let effectIntensity = 1;
-
-    if (activeEffect) {
-      const elapsed = timeSec - activeEffect.startTime;
-      const remaining = activeEffect.startTime + activeEffect.duration - timeSec;
-
-      if (activeEffect.fadeIn > 0 && elapsed < activeEffect.fadeIn) {
-        effectIntensity = elapsed / activeEffect.fadeIn;
-      } else if (activeEffect.fadeOut > 0 && remaining < activeEffect.fadeOut) {
-        effectIntensity = remaining / activeEffect.fadeOut;
-      } else {
-        effectIntensity = 1;
-      }
-
-      if (activeEffect.effectType === 'camera_shake') {
-        shakeX = Math.sin(timeSec * 35) * 8 * effectIntensity;
-        shakeY = Math.cos(timeSec * 28) * 6 * effectIntensity;
-      }
-    }
-
+  public renderFrame(canvas: HTMLCanvasElement, time: number, videos: VideoClipData[], effects: EffectClipData[], images: ImageClipData[], subtitles: SubtitleData[]) {
+    const ctx = canvas.getContext('2d'); if (!ctx) return;
+    const width = canvas.width, height = canvas.height;
+    ctx.clearRect(0, 0, width, height); ctx.fillStyle = 'black'; ctx.fillRect(0, 0, width, height);
+    const active = [...videos.map(c => ({...c, kind: 'video'})), ...images.map(c => ({...c, kind: 'image'}))].filter(c => time >= c.startTime && time < c.startTime + c.duration).sort((a,b) => (a.layer || 0)-(b.layer || 0));
+    const draw = (source: CanvasImageSource, w: number, h: number, alpha: number) => {
+      if (!w || !h) return;
+      const ratio = Math.min(width / w, height / h); ctx.globalAlpha = alpha;
+      ctx.drawImage(source, (width - w*ratio)/2, (height - h*ratio)/2, w*ratio, h*ratio);
+    };
     ctx.save();
-    ctx.translate(shakeX, shakeY);
-
-    if (activeVideo) {
-      const alpha = Math.max(0, Math.min(1, (activeVideo.transparency ?? 100) / 100));
-      ctx.globalAlpha = alpha;
-
-      let renderedRealVideo = false;
-
-      if (activeVideo.mediaUrl) {
-        const vEl = this.getVideoElement(activeVideo.mediaUrl);
-        if (vEl.videoWidth > 0 && (vEl.readyState >= 1 || vEl.currentTime >= 0)) {
-          // Draw real video with aspect ratio containment
-          const vw = vEl.videoWidth;
-          const vh = vEl.videoHeight;
-          const vAspect = vw / vh;
-          const cAspect = width / height;
-
-          let dw = width;
-          let dh = height;
-          let dx = 0;
-          let dy = 0;
-
-          if (vAspect > cAspect) {
-            dh = width / vAspect;
-            dy = (height - dh) / 2;
-          } else {
-            dw = height * vAspect;
-            dx = (width - dw) / 2;
-          }
-
-          try {
-            ctx.drawImage(vEl, dx, dy, dw, dh);
-            renderedRealVideo = true;
-          } catch (err) {
-            // ignore drawImage exception
-          }
-        }
-      }
-
-      if (!renderedRealVideo) {
-        // Fallback indicator while video frame decodes
-        ctx.fillStyle = '#111827';
-        ctx.fillRect(0, 0, width, height);
-
-        ctx.fillStyle = '#38bdf8';
-        ctx.font = 'bold 20px "Plus Jakarta Sans", sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(`▶ ${activeVideo.name}`, width / 2, height / 2 - 12);
-
-        ctx.font = '13px "JetBrains Mono", monospace';
-        ctx.fillStyle = '#94a3b8';
-        ctx.fillText(`Fotogramma in caricamento (${timeSec.toFixed(1)}s)`, width / 2, height / 2 + 16);
-      }
-
-      // Draw effect badge if active
-      if (activeEffect) {
-        ctx.fillStyle = 'rgba(203, 92, 91, 0.9)';
-        ctx.fillRect(width / 2 - 130, 20, 260, 26);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '600 12px "Plus Jakarta Sans", sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(`FX: ${activeEffect.name} (${Math.round(effectIntensity * 100)}%)`, width / 2, 37);
-      }
-    } else if (activeImage) {
-      const alpha = Math.max(0, Math.min(1, (activeImage.transparency ?? 100) / 100));
-      ctx.globalAlpha = alpha;
-
-      let renderedRealImage = false;
-
-      if (activeImage.mediaUrl) {
-        const imgEl = this.getImageElement(activeImage.mediaUrl);
-        if (imgEl.complete && imgEl.naturalWidth > 0) {
-          const iw = imgEl.naturalWidth;
-          const ih = imgEl.naturalHeight;
-          const iAspect = iw / ih;
-          const cAspect = width / height;
-
-          let dw = width;
-          let dh = height;
-          let dx = 0;
-          let dy = 0;
-
-          if (iAspect > cAspect) {
-            dh = width / iAspect;
-            dy = (height - dh) / 2;
-          } else {
-            dw = height * iAspect;
-            dx = (width - dw) / 2;
-          }
-
-          ctx.drawImage(imgEl, dx, dy, dw, dh);
-          renderedRealImage = true;
-        }
-      }
-
-      if (!renderedRealImage) {
-        ctx.fillStyle = '#1c1917';
-        ctx.fillRect(30, 20, width - 60, height - 40);
-
-        ctx.fillStyle = '#eab308';
-        ctx.font = 'bold 20px "Plus Jakarta Sans", sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(`📷 ${activeImage.name}`, width / 2, height / 2);
-      }
-    } else {
-      // Empty timeline
-      ctx.fillStyle = '#0b0f19';
-      ctx.fillRect(0, 0, width, height);
-
-      ctx.fillStyle = '#475569';
-      ctx.font = '14px "Plus Jakarta Sans", sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('Nessuna clip video o immagine a questo timestamp', width / 2, height / 2 - 10);
-      ctx.font = '12px "JetBrains Mono", monospace';
-      ctx.fillStyle = '#334155';
-      ctx.fillText('Trascina o posiziona una clip video nella traccia blu', width / 2, height / 2 + 15);
+    for (const effect of effects.filter(e => time >= e.startTime && time < e.startTime + e.duration)) {
+      const intensity = Math.max(0, Math.min(1, (time-effect.startTime)/Math.max(.04,effect.fadeIn), (effect.startTime+effect.duration-time)/Math.max(.04,effect.fadeOut)));
+      if (effect.effectType === 'camera_shake') { ctx.translate(width/2,height/2); ctx.scale(1.02,1.02); ctx.translate(-width/2+Math.sin(time*23)*5*intensity,-height/2+Math.cos(time*19)*5*intensity); }
+      if (effect.effectType === 'blur') ctx.filter = 'blur(4px)';
+      if (effect.effectType === 'vintage') ctx.filter = 'saturate(.4) contrast(1.1)';
+      if (effect.effectType === 'cinematic') ctx.filter = 'contrast(1.15) saturate(.8)';
+      if (effect.effectType === 'glow') ctx.filter = 'brightness(1.08) saturate(1.2)';
     }
-
+    for (const clip of active) {
+      if (!clip.mediaUrl) continue;
+      const alpha = Math.max(0, Math.min(1, (clip.transparency ?? 100)/100));
+      if (clip.kind === 'video') {
+        const v = this.getVideoElement(clip.mediaUrl, clip.id);
+        if (v.readyState >= 2 && !v.seeking) draw(v, v.videoWidth, v.videoHeight, alpha);
+        else if (v.error) { ctx.globalAlpha = 1; ctx.fillStyle = '#fda4af'; ctx.font = '14px sans-serif'; ctx.fillText(`Media non riproducibile: ${clip.name}`, 16, 30); }
+        else if (v.readyState >= 2) draw(v, v.videoWidth, v.videoHeight, alpha);
+      } else { const image = this.getImageElement(clip.mediaUrl); if (image.complete && image.naturalWidth) draw(image, image.naturalWidth, image.naturalHeight, alpha); }
+    }
     ctx.restore();
-
-    // Render subtitle if active
-    const activeSub = subtitles.find(s => timeSec >= s.startTime && timeSec <= s.endTime);
-    if (activeSub) {
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
-      ctx.font = 'bold 15px "Plus Jakarta Sans", sans-serif';
-      const textMetrics = ctx.measureText(activeSub.text);
-      const subWidth = Math.min(width - 40, textMetrics.width + 32);
-      ctx.fillRect((width - subWidth) / 2, height - 56, subWidth, 32);
-
-      ctx.fillStyle = '#facc15';
-      ctx.textAlign = 'center';
-      ctx.fillText(activeSub.text, width / 2, height - 35);
+    const subtitle = subtitles.find(s => time >= s.startTime && time < s.endTime);
+    if (subtitle) {
+      ctx.font = `bold ${Math.round(height/24)}px sans-serif`; ctx.textAlign = 'center';
+      const w = Math.min(width - 20, ctx.measureText(subtitle.text).width + 16), h = height/20;
+      ctx.fillStyle = '#000b'; ctx.fillRect((width-w)/2, height-h-18, w, h+8); ctx.fillStyle = 'yellow'; ctx.fillText(subtitle.text, width/2, height-18, width-24);
     }
+  }
+  public pauseAll() { this.videoCache.forEach(v => v.pause()); this.audioCache.forEach(a => a.pause()); }
+  public dispose() {
+    this.pauseAll(); this.onFrameReady = null;
+    for (const element of [...this.videoCache.values(), ...this.audioCache.values()]) { element.removeAttribute('src'); element.load(); }
+    this.videoCache.clear(); this.audioCache.clear(); this.imageCache.clear(); this.gains.clear();
+    if (this.audioContext) void this.audioContext.close(); this.audioContext = null;
   }
 }
-
 export const playbackEngine = new PlaybackEngine();

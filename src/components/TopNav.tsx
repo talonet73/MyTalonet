@@ -23,6 +23,7 @@ interface TopNavProps {
   claudeConnected: boolean;
   onToggleClaude: () => void;
   onOpenClaudeDialog: () => void;
+  onOpenChatGPT: () => void;
   onCut: () => void;
   onDelete: () => void;
   onUndo: () => void;
@@ -45,6 +46,7 @@ export const TopNav: React.FC<TopNavProps> = ({
   claudeConnected,
   onToggleClaude,
   onOpenClaudeDialog,
+  onOpenChatGPT,
   onCut,
   onDelete,
   onUndo,
@@ -150,6 +152,7 @@ export const TopNav: React.FC<TopNavProps> = ({
 
       {/* Main Action Tool Bar */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-[#0e1424] overflow-x-auto gap-2">
+        <button onClick={onOpenChatGPT} title="ChatGPT MCP" className="px-3 py-2 rounded bg-emerald-950 text-emerald-300 hover:bg-emerald-900 whitespace-nowrap font-bold">ChatGPT MCP</button>
         {/* Actions Left */}
         <div className="flex items-center gap-1">
           <button
