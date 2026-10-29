@@ -27,6 +27,7 @@ export interface TimelineClip {
   effects?: VisualEffect[];
   intensity?: number; // effect controls: 0..10, default 5
   speed?: number;
+  speedLevel?: number; // -5..+5 playback step; independent of effect animation speed
   effectSpan?: number; // original animation duration, retained through cuts
   animationOffset?: number; // internal still-frame animation clock
   text?: string;

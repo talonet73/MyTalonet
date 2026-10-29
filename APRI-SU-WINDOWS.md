@@ -17,10 +17,15 @@ Se compare un blocco di sicurezza di Windows, controlla provenienza e messaggio 
 
 Il primo file usa il programma di installazione di Windows per Node.js LTS, Python 3.12, FFmpeg e i componenti Microsoft necessari. Rimangono attive le verifiche normali delle fonti e dei pacchetti. Il secondo installa le versioni dell’app conservate nel progetto, usa PyAV 16.1.0 e salva il modello vocale nella cartella personale di Windows. Prepara anche BG Remover con un ambiente separato e un modello gratuito da circa 4,6 MB. Non serve un abbonamento a servizi di riconoscimento vocale.
 
-L’app e stata avviata e verificata realmente nel browser dell’ambiente Linux di sviluppo, con 47 test principali e 19 prove browser superate. Non e disponibile una macchina Windows in questo ambiente: la procedura di installazione Windows e predisposta, ma non e stata eseguita su Windows. Un eventuale errore specifico di quel sistema va verificato sulla macchina interessata.
+L’app e stata avviata e verificata realmente nel browser dell’ambiente Linux di sviluppo, con 62 test principali e 22 prove browser superate. Non e disponibile una macchina Windows in questo ambiente: la procedura di installazione Windows e predisposta, ma non e stata eseguita su Windows. Un eventuale errore specifico di quel sistema va verificato sulla macchina interessata.
 
 YouTube diretto rimane soggetto alle restrizioni di rete. Il pulsante **Carica video locale**, presente nella finestra YouTube, consente di importare un file gia sul tuo computer. Nessun blocco viene aggirato.
 
 Effects mostra le anteprime da trascinare soltanto su EFFECTS. Clicca il mattoncino nella timeline per regolare Intensità e Velocità da 0 a 10. Per Transitions, Adjustment e BG Remover seleziona prima un video o un’immagine. Video, audio e immagini entrano soltanto nelle rispettive tracce. Se avevi scaricato una versione precedente, scarica nuovamente la cartella aggiornata e riaprila con 2-AVVIA-TALEDIT.cmd.
 
 Nella nuova versione, per i sottotitoli premi **Captions → Trascrivi audio**, correggi il testo e poi **GENERATE**: compariranno i mattoncini arancioni su TESTO. Puoi spostare le finestre dalla barra del titolo, regolare l’altezza delle piste con la maniglietta sopra il nome e salvare un fotogramma con **Screenshot**. In **Esporta** scegli prima Video, Audio o Immagine; quest’ultima richiede una clip nella pista IMMAGINI.
+
+
+Velocità: clic destro su una clip, **Velocità clip…**, scegli da −5 (25%) a +5 (400%), poi **Applica velocità**. Lo zero corrisponde al 100%. Per duplicare un livello usa il pulsante con due fogli accanto al suo nome. Con molte piste scorri nella timeline; tieni premuto **Ctrl** e muovi la rotella per ingrandire/ridurre mattoncini e piste insieme.
+
+Con **2-AVVIA-TALEDIT.cmd**, Screenshot salva automaticamente un PNG nella cartella Download di Windows e mostra una conferma nell’app. Se la cartella non è scrivibile viene usato il download del browser. Per l’avvio manuale si può configurare `SCREENSHOT_DIR`; se non è configurato, la destinazione dipende dalle impostazioni di download del browser.

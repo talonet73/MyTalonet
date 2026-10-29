@@ -86,7 +86,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       .filter(c => c.type === 'video' && category!=='image')
       .map(c => ({
         id: c.id,
-        name: c.name,
+        name: c.name,speedLevel:c.speedLevel,
         transparency: c.transparency,
       effects: c.effects, adjustments: c.adjustments, fadeIn:c.fadeIn, fadeOut:c.fadeOut,
         layer: clips.indexOf(c),
@@ -100,7 +100,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       .filter(c => c.type === 'effect')
       .map(c => ({
         id: c.id,
-        name: c.name,
+        name: c.name,speedLevel:c.speedLevel,
         fadeIn: c.fadeIn,
         fadeOut: c.fadeOut,
         startTime: c.startTime,
@@ -113,7 +113,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       .filter(c => c.type === 'image')
       .map(c => ({
         id: c.id,
-        name: c.name,
+        name: c.name,speedLevel:c.speedLevel,
         transparency: c.transparency,
       effects: c.effects, adjustments: c.adjustments, fadeIn:c.fadeIn, fadeOut:c.fadeOut,
         layer: clips.indexOf(c),

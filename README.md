@@ -52,9 +52,9 @@ La finestra separa **Video**, **Audio** e **Immagine**:
 
 Video H.264/AAC, tranne WebM VP9/Opus e AVI H.264/PCM. WAV/AVI usano PCM 16-bit stereo 48 kHz; AIFF PCM big endian. FLAC è senza perdita. M4A e AAC usano AAC; OGG usa Vorbis; OPUS usa Opus.
 
-**Immagine** è abilitata quando la pista IMMAGINI contiene almeno una clip. Il tempo scelto deve mostrare un’immagine attiva: vengono composte le immagini, gli effetti e i testi a quel tempo; le tracce video/audio sono escluse. I formati immagine salvano un solo fotogramma. Il tasto **Screenshot**, con macchina fotografica, invece salva in PNG il fotogramma video al cursore con il resto del montaggio visibile, a 1080p e nelle proporzioni del progetto. È disabilitato se al cursore non c’è un video attivo.
+**Immagine** è abilitata quando la pista IMMAGINI contiene almeno una clip. Il tempo scelto deve mostrare un’immagine attiva: vengono composte le immagini, gli effetti e i testi a quel tempo; le tracce video/audio sono escluse. I formati immagine salvano un solo fotogramma. Il tasto **Screenshot**, con macchina fotografica, salva in PNG il fotogramma video al cursore con il resto del montaggio visibile, a 1080p e nelle proporzioni del progetto. Con l’avvio guidato Windows viene scritto automaticamente nella cartella Download dell’utente, anche quando reindirizzata; compare una conferma. Nell’avvio manuale o online usa il download del browser, che rispetta la cartella e le eventuali richieste di conferma configurate nel browser. È disabilitato se al cursore non c’è un video attivo.
 
-Il server compone i media reali rispettando offset, tempi, opacità, volume, mute/solo, immagini, effetti e sottotitoli. L’audio dei video separati in due clip viene mixato una sola volta. Clip video prive di audio non fanno fallire l’export. I media mancanti causano un errore visibile: nessun falso successo e nessun fallback con estensione ingannevole. Proporzioni 16:9, 9:16, 1:1 e 4:3; risoluzioni 720p, 1080p, 4K. Limiti dichiarati: 600 secondi, 200 clip multimediali più 2000 testi, due export simultanei, caricamenti da 500 MB.
+Il server compone i media reali rispettando offset, tempi, opacità, volume, mute/solo, immagini, effetti e sottotitoli. L’audio dei video separati in due clip viene mixato una sola volta. Clip video prive di audio non fanno fallire l’export. I media mancanti causano un errore visibile: nessun falso successo e nessun fallback con estensione ingannevole. Proporzioni 16:9, 9:16, 1:1 e 4:3; risoluzioni 720p, 1080p, 4K. Limiti dichiarati: 600 secondi, 2000 testi, due export simultanei, caricamenti da 500 MB.
 
 La dimensione indicata è una stima basata sul bitrate, non una promessa di dimensione esatta. L’anteprima degli effetti è indicativa; FFmpeg è il render definitivo. La percentuale UI indica le fasi di lavoro, non un conteggio dei frame FFmpeg.
 
@@ -125,8 +125,24 @@ Limiti: un lavoro BG per volta, massimo 10 minuti per clip, 33 megapixel per fot
 
 ## Finestre e dimensioni della timeline
 
-Tutte le finestre dell’app si spostano trascinando la barra del titolo, senza interferire con i pulsanti e i campi. Il player adatta il fotogramma completo alla larghezza e all’altezza disponibili, comprese le proporzioni verticali e lo schermo intero. Il divisore orizzontale cambia lo spazio della timeline e l’altezza dei mattoncini. La maniglietta sopra il nome di ogni pista ne cambia singolarmente l’altezza; nome, corsia e clip restano allineati. Le altezze sono salvate nel progetto.
+Tutte le finestre dell’app si spostano trascinando la barra del titolo, senza interferire con i pulsanti e i campi. Il player adatta il fotogramma completo alla larghezza e all’altezza disponibili, comprese le proporzioni verticali e lo schermo intero. Il divisore orizzontale cambia lo spazio della timeline e l’altezza dei mattoncini. **Ctrl + rotella** ingrandisce/riduce insieme larghezza e altezza dei mattoncini, mantenendo il punto sotto il mouse. La maniglietta sopra il nome di ogni pista ne cambia singolarmente l’altezza; nome, corsia e clip restano allineati. Le altezze sono salvate nel progetto.
 
 Le clip AUDIO mostrano onde calcolate dai campioni del file, rispettando offset e durata. Il volume è indicato dal controllo dedicato; l’onda viene adattata all’altezza per renderla leggibile. Se la sorgente non contiene audio o non è disponibile, viene mostrato un esito esplicito senza onde inventate.
 
 Verifiche aggiuntive di testo, finestre, ridimensionamento, formati e Screenshot: [docs/timeline-export-verification.md](docs/timeline-export-verification.md).
+
+## Velocità dei mattoncini e duplicazione delle piste
+
+Tasto destro sul mattoncino → **Velocità clip…**. Scegli il livello da −5 a +5 e premi **Applica velocità**. Il valore 0 è la velocità originale. I numeri negativi rallentano; non sono riproduzione al contrario.
+
+| Livello | −5 | −4 | −3 | −2 | −1 | 0 | +1 | +2 | +3 | +4 | +5 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Velocità | 25% | 40% | 50% | 65% | 80% | 100% | 125% | 150% | 200% | 300% | 400% |
+
+La durata della clip cambia conservando l’intervallo della sorgente; l’audio collegato segue la modifica e mantiene la tonalità. Anche tagli, offset, onde, Screenshot, sottotitoli Whisper ed esportazioni leggono la velocità salvata. Per immagini e testi cambia il tempo di permanenza; per effetti anche il tempo dell’animazione. Il controllo **Velocità** 0–10 degli effetti rimane distinto dal ritmo di riproduzione della clip. Altre piste e clip successive conservano le proprie posizioni: non viene applicato uno spostamento automatico dell’intero montaggio.
+
+Il pulsante con due fogli accanto al nome della pista la duplica con tutti i mattoncini. Duplicando una pista video vengono creati anche i duplicati dell’audio collegato su nuove piste audio; duplicare solo una pista audio produce copie indipendenti. Immagini, effetti e testi conservano le proprie impostazioni. Annulla/Ripristina copre l’intera operazione.
+
+Sono stati rimossi i precedenti limiti numerici di piste e clip multimediali dell’editor. Le barre della timeline permettono scorrimento verticale e orizzontale; la rotella funziona anche sopra i nomi delle piste. La capacità effettiva dipende da RAM, CPU e dimensione del progetto: non equivale a risorse infinite. Restano i limiti di 10 minuti di esportazione, 2000 testi, due rendering simultanei e richieste JSON da 5 MB. Le piste vuote e gli effetti fuori dall’intervallo esportato non generano ingressi FFmpeg inutili.
+
+Verifiche di questo intervento: [docs/speed-layers-verification.md](docs/speed-layers-verification.md).

@@ -1,3 +1,4 @@
+import {clipRate,tempoFilters,validSpeedLevel} from '../src/services/clipSpeed';
 import type {Express} from 'express';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -10,12 +11,13 @@ export function installWaveform(app:Express){
     try{
       const file=localMediaPath(String(req.query.mediaUrl || '')),offset=Number(req.query.offset||0),duration=Number(req.query.duration||1);
       if(!Number.isFinite(offset)||offset<0||!Number.isFinite(duration)||duration<=0||duration>600)throw new InputError('Intervallo audio non valido.');
-      const stat=await fs.stat(file),key=JSON.stringify([file,stat.mtimeMs,offset,duration]);
+      const speedLevel=Number(req.query.speedLevel||0);if(!validSpeedLevel(speedLevel))throw new InputError('Velocità audio non valida.');
+      const stat=await fs.stat(file),key=JSON.stringify([file,stat.mtimeMs,offset,duration,speedLevel]);
       if(cache.has(key)){res.json({peaks:cache.get(key)});return;}
       if(running>=4){res.status(429).json({error:'Forma d’onda in preparazione. Riprova.'});return;}
       running++;
       try{
-        const {stdout}=await exec('ffmpeg',['-v','error','-ss',String(offset),'-i',file,'-t',String(duration),'-vn','-af','apad','-ac','1','-ar','4000','-f','f32le','pipe:1'],{encoding:'buffer',maxBuffer:12*1024*1024,timeout:30000});
+        const {stdout}=await exec('ffmpeg',['-v','error','-ss',String(offset),'-i',file,'-t',String(duration),'-vn','-af',[...tempoFilters(clipRate({speedLevel})),'apad'].join(','),'-ac','1','-ar','4000','-f','f32le','pipe:1'],{encoding:'buffer',maxBuffer:12*1024*1024,timeout:30000});
         const samples=new Float32Array(stdout.buffer.slice(stdout.byteOffset,stdout.byteOffset+stdout.byteLength));
         const peaks=Array.from({length:Math.min(1024,Math.max(1,samples.length))},(_,i)=>{
           const from=Math.floor(i*samples.length/Math.min(1024,samples.length)),to=Math.floor((i+1)*samples.length/Math.min(1024,samples.length));let peak=0;

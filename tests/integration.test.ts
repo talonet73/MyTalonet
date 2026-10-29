@@ -288,6 +288,7 @@ test('waveforms are real source amplitudes and reflect the requested source inte
   assert.equal(silence.status,500);
   const changing=path.join(temp,'changing.wav');await ff(['-f','lavfi','-i',"aevalsrc='if(lt(t,0.5),0,0.5*sin(2*PI*440*t))':s=48000:d=1",changing]);const asset=await upload(changing);
   const quiet=await api(query(asset,0,.4)),loud=await api(query(asset,.6,.4));assert.ok(Math.max(...quiet.data.peaks)<.001);assert.ok(Math.max(...loud.data.peaks)>.4);
+  const fast=await api(query(asset,0,.4)+'&speedLevel=3');assert.equal(fast.status,200);assert.ok(Math.max(...fast.data.peaks)>.4,'200% reaches the source sound within this shorter interval');
 });
 test('caption generation preserves corrected text and timestamps as editable orange clips',async()=>{
   const {captionClips,timelineSubtitles}=await import('../src/services/captionClips');
@@ -300,4 +301,47 @@ test('caption generation preserves corrected text and timestamps as editable ora
   async function yellow(t:number){const result=await promisify(execFile)('ffmpeg',['-v','error','-ss',String(t),'-i',output.file,'-frames:v','1','-pix_fmt','rgb24','-f','rawvideo','-'],{encoding:'buffer',maxBuffer:8*1024*1024});let count=0;for(let i=0;i<result.stdout.length;i+=3)if(result.stdout[i]>180 && result.stdout[i+1]>180 && result.stdout[i+2]<100)count++;return count;}
   assert.equal(await yellow(.2),0);assert.ok(await yellow(.8)>100);assert.equal(await yellow(1.24),0);assert.ok(await yellow(1.5)>100);
 
+});
+
+for(const [level,percent] of [-5,-4,-3,-2,-1,0,1,2,3,4,5].map((level,i)=>[level,[25,40,50,65,80,100,125,150,200,300,400][i]]))test(`clip speed ${level} renders ${percent}% with synchronized picture and original audio pitch`,async()=>{
+  const rate=percent/100,duration=2/rate;
+  const {file,info}=await exported({durationSec:duration,clips:[clip(video,{duration,speedLevel:level})]});
+  assert.ok(Math.abs(Number(info.format.duration)-duration)<.09);
+  assert.ok((await pixel(file,.4/rate))[0]>220,'early source red');assert.ok((await pixel(file,1.5/rate))[2]>220,'late source blue');
+  const audio=await samples(file),start=Math.round(.15*audio.length),end=Math.round(.85*audio.length);let crossings=0;
+  for(let i=start+1;i<end;i++)if(audio[i-1]<0 && audio[i]>=0)crossings++;
+  const hz=crossings/((end-start)/48000);assert.ok(Math.abs(hz-440)<6,`pitch must remain 440 Hz: ${hz}`);assert.ok(rms(audio)>.04);
+});
+test('speed edits preserve source span, linked audio and cut offsets; invalid rates fail',async()=>{
+  const {changeClipSpeed,clipRate}=await import('../src/services/clipSpeed');const {applyTimelineTool}=await import('../src/services/timelineTools');
+  const pair=[clip(video,{linkedClipId:'a',isLinked:true}),clip(video,{id:'a',type:'audio',trackId:'audio',linkedClipId:'v',isLinked:true})];
+  const fast=changeClipSpeed(pair,'v',5);assert.equal(fast[0].duration,.5);assert.equal(fast[1].speedLevel,5);assert.equal(fast[1].duration,.5);
+  const cut=applyTimelineTool({clips:fast,tracks:[],mediaAssets:[video],currentTime:.2,selectedClipId:'v',subtitles:[],aspectRatio:'16:9'},'cut_clip_at_time',{timeSeconds:.2});
+  const right=cut.clips.find(c=>c.id===cut.selectedClipId)!;assert.equal(right.offset,.8);assert.equal(cut.clips.find(c=>c.id===right.linkedClipId)!.offset,.8);
+  const result=await exported({durationSec:.5,clips:cut.clips});assert.ok((await pixel(result.file,.3))[2]>220);
+  for(const type of ['image','effect','text'] as const){const before=clip(image,{type,duration:3,offset:.2,fadeIn:.4,fadeOut:.2,speed:5});const after=changeClipSpeed([before],'v',3)[0];assert.equal(after.duration,1.5);assert.equal(after.offset,.2);assert.equal(after.fadeIn,.2);assert.equal(after.speed,5);assert.equal(clipRate(after),2);}
+  for(const speedLevel of [-6,6,.5,'fast'])assert.equal((await api('/api/export',{durationSec:1,clips:[clip(video,{speedLevel})]})).status,400);
+});
+test('whole tracks duplicate actual contents and video soundtrack pairs without reusing IDs',async()=>{
+  const {duplicateTrack}=await import('../src/services/duplicateTrack');
+  const tracks:any=[{id:'video',name:'VIDEO',type:'video',height:100},{id:'audio',name:'AUDIO',type:'audio'},{id:'image',name:'IMMAGINI',type:'image'},{id:'effect',name:'EFFECTS',type:'effect'}];
+  const clips:any=[clip(video,{linkedClipId:'a',isLinked:true,speedLevel:3}),clip(video,{id:'a',type:'audio',trackId:'audio',linkedClipId:'v',isLinked:true,speedLevel:3}),clip(image,{id:'i',trackId:'image'}),{...clip(image),id:'fx',type:'effect',trackId:'effect',effectType:'zoom_in',intensity:8,speed:2}];
+  for(const track of tracks){const next=duplicateTrack(tracks,clips,track.id),copies=next.clips.slice(clips.length);assert.equal(next.tracks.find(t=>t.id===next.newTrackId)!.type,track.type);assert.ok(copies.every(c=>!clips.some((old:any)=>old.id===c.id)));assert.equal(new Set(next.clips.map(c=>c.id)).size,next.clips.length);if(track.type==='video'){assert.equal(copies.length,2);assert.equal(copies[0].linkedClipId,copies[1].id);assert.equal(copies[1].linkedClipId,copies[0].id);assert.equal(copies[0].speedLevel,3);}else{assert.equal(copies.length,1);assert.equal(copies[0].isLinked,false);}}
+  let many={tracks,clips};for(let i=0;i<120;i++)many=duplicateTrack(many.tracks,many.clips,'image');assert.equal(many.tracks.length,124);
+});
+test('projects beyond the old track limit synchronize and export active content without a clip-count cap',async()=>{
+  const tracks:any=Array.from({length:251},(_,i)=>({id:`t${i}`,name:`IMMAGINI ${i}`,type:'image'}));tracks.push({id:'video',name:'VIDEO',type:'video'});
+  const clips=[clip(video,{duration:.4}),...tracks.filter((t:any)=>t.type==='image').map((t:any,i:number)=>clip(image,{id:`late${i}`,trackId:t.id,startTime:10,duration:1}))];
+  const snap=(await api('/api/editor/state')).data;const state={clips,tracks,subtitles:[],mediaAssets:[video,image],currentTime:0,selectedClipId:null,aspectRatio:'16:9'};
+  assert.equal((await api('/api/editor/state',{state,revision:snap.revision},'PUT')).status,200);
+  const result=await exported({durationSec:.4,clips,tracks});assert.ok((await pixel(result.file,.2))[0]>220);
+});
+test('local Screenshot saves a real PNG directly to Downloads and keeps browser fallback on write failure',async()=>{
+  const original=process.env.SCREENSHOT_DIR,folder=path.join(temp,'Downloads');process.env.SCREENSHOT_DIR=folder;
+  try{
+    const result=await api('/api/screenshot',{durationSec:2,frameTime:1.2,resolution:'720p',clips:[clip(video)]});assert.equal(result.status,200);assert.equal(result.data.savedToDownloads,true);assert.match(result.data.fileName,/\.png$/);
+    const saved=await fs.readFile(path.join(folder,result.data.fileName)),downloaded=await(await fetch(base+result.data.downloadUrl)).arrayBuffer();assert.deepEqual(saved,Buffer.from(downloaded));assert.deepEqual([...saved.subarray(0,8)],[137,80,78,71,13,10,26,10]);
+    const blocked=path.join(temp,'not-a-folder');await fs.writeFile(blocked,'x');process.env.SCREENSHOT_DIR=blocked;
+    const fallback=await api('/api/screenshot',{durationSec:2,frameTime:.2,clips:[clip(video)]});assert.equal(fallback.status,200);assert.equal(fallback.data.savedToDownloads,false);assert.equal((await fetch(base+fallback.data.downloadUrl)).status,200);
+  }finally{if(original===undefined)delete process.env.SCREENSHOT_DIR;else process.env.SCREENSHOT_DIR=original;}
 });

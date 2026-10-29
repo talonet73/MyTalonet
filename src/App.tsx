@@ -1,3 +1,6 @@
+import {changeClipSpeed,clipRate,validSpeedLevel} from './services/clipSpeed';
+import {duplicateTrack} from './services/duplicateTrack';
+import {downloadScreenshot} from './services/screenshotDownload';
 /**
  * TALEDIT - Video Editor con Claude DT MCP Integration
  * SPDX-License-Identifier: Apache-2.0
@@ -370,7 +373,7 @@ export default function App() {
       try {
         const content = evt.target?.result as string;
         const data = JSON.parse(content);
-        if (data.appName !== 'TALEDIT' || !Array.isArray(data.tracks) || !Array.isArray(data.clips) || data.tracks.length > 100 || data.clips.length > 2200 || data.clips.some((c: any) => !c.id || !['video','audio','image','effect','text'].includes(c.type) || !Number.isFinite(c.startTime) || c.startTime < 0 || !Number.isFinite(c.duration) || c.duration <= 0)) throw new Error('Progetto TALEDIT non valido.');
+        if (data.appName !== 'TALEDIT' || !Array.isArray(data.tracks) || !Array.isArray(data.clips) || data.clips.some((c: any) => !c.id || !['video','audio','image','effect','text'].includes(c.type) || !Number.isFinite(c.startTime) || c.startTime < 0 || !Number.isFinite(c.duration) || c.duration <= 0 || !validSpeedLevel(c.speedLevel))) throw new Error('Progetto TALEDIT non valido.');
         let normalized=normalizeTrackAssignments(data.clips,data.tracks);
         if(!normalized.tracks.some(t=>t.type==='text'))normalized.tracks.push(textTrack());
         if(data.captionWorkflow!=='timeline' && !data.clips.some((c:TimelineClip)=>c.type==='text') && data.subtitles?.length)normalized=captionClips(data.subtitles,normalized.clips,normalized.tracks,false,data.bilingualCaptions);
@@ -746,7 +749,7 @@ export default function App() {
       const target = prev.find(c => c.id === clipId);
       if (target && updates.duration !== undefined && ['video','audio'].includes(target.type)) {
         const asset=mediaAssets.find(a=>a.id===target.assetId);
-        if(asset)updates={...updates,duration:Math.max(.04,Math.min(updates.duration,asset.durationSec-(updates.offset ?? target.offset ?? 0)))};
+        if(asset)updates={...updates,duration:Math.max(.04,Math.min(updates.duration,(asset.durationSec-(updates.offset ?? target.offset ?? 0))/clipRate(target)))};
       }
       const linkedUpdates = Object.fromEntries(Object.entries(updates).filter(([key]) => ['startTime', 'duration', 'offset'].includes(key)));
       const next = prev.map(c => c.id === clipId ? { ...c, ...updates } : target?.isLinked && target.linkedClipId === c.id ? { ...c, ...linkedUpdates, ...(updates.offset!==undefined?{offset:Math.max(0,Math.round(((c.offset||0)+updates.offset-(target.offset||0))*1e6)/1e6)}:{}) } : c);
@@ -808,7 +811,7 @@ export default function App() {
       : '#1a1608';
 
     const newTrack: Track = {
-      id: `track_${type}_${Date.now()}`,
+      id: crypto.randomUUID(),
       name,
       type,
       isSolo: false,
@@ -906,7 +909,7 @@ export default function App() {
       {/* 1. Top Navigation Bar */}
       <TopNav
         canScreenshot={!screenshotBusy && activeTimelineClips(clips,tracks).some(c=>c.type==='video' && currentTime>=c.startTime && currentTime<c.startTime+c.duration)}
-        onScreenshot={async()=>{setIsPlaying(false);setScreenshotBusy(true);try{const response=await fetch('/api/screenshot',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clips,tracks,subtitles:timelineSubtitles(activeTimelineClips(clips,tracks)),durationSec:Math.max(.04,...clips.map(c=>c.startTime+c.duration)),frameTime:currentTime,resolution:'1080p',aspectRatio})});const result=await response.json();if(!response.ok)throw new Error(result.error || 'Screenshot non riuscito.');const a=document.createElement('a');a.href=result.downloadUrl;a.download=result.fileName;a.click();}catch(error){setTrackConstraintWarning((error as Error).message);}finally{setScreenshotBusy(false);}}}
+        onScreenshot={async()=>{setIsPlaying(false);setScreenshotBusy(true);try{const response=await fetch('/api/screenshot',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clips,tracks,subtitles:timelineSubtitles(activeTimelineClips(clips,tracks)),durationSec:Math.max(.04,...clips.map(c=>c.startTime+c.duration)),frameTime:currentTime,resolution:'1080p',aspectRatio})});const result=await response.json();if(!response.ok)throw new Error(result.error || 'Screenshot non riuscito.');await downloadScreenshot(result);setToastMessage(result.savedToDownloads?`Screenshot salvato in Download: ${result.fileName}`:'Screenshot PNG scaricato.');setTimeout(()=>setToastMessage(null),4000);}catch(error){setTrackConstraintWarning((error as Error).message);}finally{setScreenshotBusy(false);}}}
         hasSelection={clips.some(c=>c.id===selectedClipId || selectedClipIds.includes(c.id))}
         canUndo={historyCount>0}
         canRedo={historyIndexRef.current<historyRef.current.length-1}
@@ -1065,6 +1068,8 @@ export default function App() {
           onResizeTrack={(id,height)=>{const next=tracks.map(t=>t.id===id?{...t,height}:t);setTracks(next);tracksRef.current=next;}}
           onDeleteTrack={handleDeleteTrack}
           onAddTrack={handleAddTrack}
+          onDuplicateTrack={id=>{try{const next=duplicateTrack(tracks,clips,id);setTracks(next.tracks);tracksRef.current=next.tracks;setClips(next.clips);clipsRef.current=next.clips;pushHistory(next.clips,next.tracks);}catch(error){setTrackConstraintWarning((error as Error).message);}}}
+          onChangeSpeed={(id,level)=>{try{const old=clips.find(c=>c.id===id);if(!old)return;const next=changeClipSpeed(clips,id,level);setIsPlaying(false);setClips(next);clipsRef.current=next;pushHistory(next);if(currentTime>=old.startTime && currentTime<old.startTime+old.duration)setCurrentTime(old.startTime+(currentTime-old.startTime)*clipRate(old)/clipRate({speedLevel:level}));}catch(error){setTrackConstraintWarning((error as Error).message);}}}
           markers={markers}
           onAddMarker={handleAddMarker}
           onUpdateMarker={handleUpdateMarker}
@@ -1099,6 +1104,7 @@ export default function App() {
         currentTime={currentTime}
       />
 
+      {toastMessage && <div role="status" onClick={()=>setToastMessage(null)} className="fixed bottom-12 left-1/2 -translate-x-1/2 max-w-[90vw] rounded-lg border border-cyan-700 bg-slate-900 px-4 py-2 text-xs text-cyan-100 shadow-xl z-50 cursor-pointer">{toastMessage}</div>}
       {/* Floating Track Constraint Warning Toast */}
       {trackConstraintWarning && (
         <div role="alert" onClick={() => setTrackConstraintWarning(null)} className="fixed bottom-12 left-1/2 -translate-x-1/2 bg-[#4c0519] border-2 border-rose-500 text-rose-100 px-5 py-2.5 rounded-lg shadow-2xl z-50 flex items-center gap-2.5 text-xs font-bold animate-in fade-in slide-in-from-bottom-2">

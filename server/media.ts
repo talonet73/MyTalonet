@@ -1,3 +1,4 @@
+import {clipRate,sourceTime,tempoFilters,validSpeedLevel} from '../src/services/clipSpeed';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
@@ -61,10 +62,11 @@ export async function exportMedia(body: any, options:{screenshot?:boolean}={}) {
   const frameTime=still?number(body.frameTime,0,0,600):0;
   const duration = number(body.durationSec, 15, 0.04, 600);
   const weight = number(body.weightPercentage, 55, 1, 100);
-  if (!Array.isArray(body.clips) || body.clips.length > 2200 || body.clips.filter((c:TimelineClip)=>c.type!=='text').length>200 || body.clips.filter((c:TimelineClip)=>c.type==='text').length>2000 || !body.clips.length) throw new InputError('Aggiungi almeno una clip alla timeline (massimo 200 clip multimediali e 2000 testi).');
+  if (!Array.isArray(body.clips) || body.clips.filter((c:TimelineClip)=>c.type==='text').length>2000 || !body.clips.length) throw new InputError('Aggiungi almeno una clip alla timeline (massimo 2000 testi).');
   if (body.tracks !== undefined && !Array.isArray(body.tracks)) throw new InputError('Tracce non valide.');
   const clips = activeClips(body.clips, body.tracks);
   for (const clip of clips) {
+    if(!validSpeedLevel(clip.speedLevel))throw new InputError('Velocità clip non valida: da -5 a +5.');
     number(clip.startTime, 0, 0, 86400); number(clip.duration, 0, 0.001, 86400); number(clip.offset, 0, 0, 86400);
     number(clip.intensity,5,0,10);number(clip.speed,5,0,10);number(clip.effectSpan,clip.duration,.001,86400);
     number(clip.volumeDb, 0, -60, 12); number(clip.transparency, 100, 0, 100);
@@ -95,7 +97,7 @@ export async function exportMedia(body: any, options:{screenshot?:boolean}={}) {
       if (!clip.linkedClipId) throw new InputError(`Nessuna traccia audio in ${clip.name}`);
     }
     const sourceDuration = Number(info.format.duration);
-    if (clip.type !== 'image' && Number.isFinite(sourceDuration) && clip.offset+(still?frameTime-clip.startTime:0) >= sourceDuration) throw new InputError(`Taglio oltre la durata del media: ${clip.name}`);
+    if (clip.type !== 'image' && Number.isFinite(sourceDuration) && clip.offset+(still?(frameTime-clip.startTime)*clipRate(clip):0) >= sourceDuration) throw new InputError(`Taglio oltre la durata del media: ${clip.name}`);
     return { ...clip, file, info };
   }));
   let width = resolution === '4K' ? 3840 : resolution === '720p' ? 1280 : 1920;
@@ -121,10 +123,10 @@ export async function exportMedia(body: any, options:{screenshot?:boolean}={}) {
     if (!visual && !audible) continue;
     const idx = input++;
     if (clip.type === 'image') args.push('-loop', '1', '-framerate', '25');
-    else args.push('-ss', String((clip.offset || 0)+(still?frameTime-clip.startTime:0)));
+    else args.push('-ss', String(still?sourceTime(clip,frameTime):(clip.offset || 0)));
     // FFmpeg's native VP9 decoder discards WebM alpha. libvpx preserves it.
     if(visual && clip.info.streams.some((s:any)=>s.codec_name==='vp9' && String(s.tags?.alpha_mode ?? s.tags?.ALPHA_MODE)==='1'))args.push('-c:v','libvpx-vp9');
-    args.push('-t', String(still ? .04:Math.min(clip.duration, duration - clip.startTime)), '-i', clip.file);
+    args.push('-t', String(still?Math.max(.04,.04*clipRate(clip)):Math.min(clip.duration, duration - clip.startTime)*(clip.type==='image'?1:clipRate(clip))), '-i', clip.file);
     if (visual) {
       const v = `v${idx}`, next = `layer${idx}`;
       const alpha = (clip.transparency ?? 100) / 100;
@@ -135,17 +137,17 @@ export async function exportMedia(body: any, options:{screenshot?:boolean}={}) {
       const a = `a${idx}`;
       const volume = clip.volumeDb <= -60 ? '0' : `${clip.volumeDb || 0}dB`;
       const fade = `${clip.fadeIn ? `,afade=t=in:d=${clip.fadeIn}` : ''}${clip.fadeOut ? `,afade=t=out:st=${Math.max(0, clip.duration - clip.fadeOut)}:d=${clip.fadeOut}` : ''}`;
-      filters.push(`[${idx}:a]asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,volume=${volume}${fade},adelay=${Math.round(clip.startTime * 1000)}:all=1[${a}]`);
+      filters.push(`[${idx}:a]asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,${tempoFilters(clipRate(clip)).map(f=>f+',').join('')}volume=${volume}${fade},apad,atrim=duration=${Math.min(clip.duration,duration-clip.startTime)},adelay=${Math.round(clip.startTime * 1000)}:all=1[${a}]`);
       audioTags.push(`[${a}]`);
     }
   }
   if (!audioOnly) {
-    for (const [i, effect] of clips.filter(c => c.type === 'effect').entries()) {
+    for (const [i, effect] of clips.filter(c => c.type === 'effect' && (still?frameTime>=c.startTime && frameTime<c.startTime+c.duration:c.startTime<duration)).entries()) {
       if(![...EFFECTS.map(e=>e.type),'dissolvenza'].includes(effect.effectType as any))throw new InputError('Effetto non supportato.');
       if(effect.intensity===0)continue;
       const next=`fx${i}`,original=`fxorig${i}`,work=`fxwork${i}`,processed=`fxprocessed${i}`;
       filters.push(`[${layer}]split[${original}][${work}]`);
-      const elapsed=`(T-${effect.startTime})`, clock=`((${elapsed}+${effect.offset||0})*${(effect.speed??5)/5})`;
+      const elapsed=`(T-${effect.startTime})`, clock=`((${elapsed}*${clipRate(effect)}+${effect.offset||0})*${(effect.speed??5)/5})`;
       const fade=`max(0,min(1,min(${effect.fadeIn?`${elapsed}/${effect.fadeIn}`:'1'},${effect.fadeOut?`(${effect.startTime+effect.duration}-T)/${effect.fadeOut}`:'1'})))`;
       const moving=['camera_shake','zoom_in','zoom_out'].includes(effect.effectType!);
       const pulse=moving?'1':`(.9+.1*cos(${clock}*6.28318530718))`;

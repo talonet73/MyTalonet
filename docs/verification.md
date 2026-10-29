@@ -55,9 +55,9 @@ Il test browser provoca un errore 403 controllato e successivamente carica un ve
 ## Esito finale dei comandi eseguiti
 
 - `npm run lint`: **PASS**, controllo TypeScript.
-- `npm test`: **PASS, 47/47**, inclusa la trascrizione reale via API, export, mix, immagini, mute/solo e MCP HTTP/SSE.
+- `npm test`: **PASS, 62/62**, inclusa la trascrizione reale via API, export, mix, immagini, mute/solo e MCP HTTP/SSE.
 - `npm run test:whisper`: **PASS**, riconoscimento di parlato noto e assenza di testo sul silenzio.
-- `npm run test:e2e`: **PASS, 19/19** test browser, inclusi fallback locale dopo 403 e download dell’export reale.
+- `npm run test:e2e`: **PASS, 22/22** test browser, inclusi fallback locale dopo 403 e download dell’export reale.
 - `git diff --check`: **PASS**, verifica formale delle modifiche.
 - `pip check`: **PASS**, nessun requisito incompatibile.
 - Build produzione eseguita dal runner browser: **PASS**.
@@ -66,3 +66,5 @@ Il test browser provoca un errore 403 controllato e successivamente carica un ve
 Restano limiti esterni distinti dalla regressione locale: download YouTube rifiutato dal proxy e collegamento effettivo di un account ChatGPT, che richiede un endpoint HTTPS pubblico e configurazione dell’account. I test MCP verificano i trasporti e le modifiche reali alla timeline tramite SDK, non la connessione di un account ChatGPT.
 
 Controllo aggiuntivo di Effects, Transitions, Captions, Adjustment e degli altri pulsanti: [matrice e risultati](toolbar-verification.md).
+
+Aggiornamento del 29 ottobre 2026: [velocità, Screenshot e livelli](speed-layers-verification.md).

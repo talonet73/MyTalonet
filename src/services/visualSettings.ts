@@ -1,3 +1,4 @@
+import {clipRate} from './clipSpeed';
 import type { TimelineClip } from '../types/editor';
 export type VisualEffect = 'camera_shake' | 'zoom_in' | 'zoom_out' | 'glow' | 'vintage' | 'cinematic' | 'monochrome' | 'blur' | 'glitch';
 export const EFFECTS: { type: VisualEffect; label: string; description: string }[] = [
@@ -18,7 +19,7 @@ export const ADJUSTMENTS = [
   { key:'sharpness', label:'Nitidezza' },
 ] as const;
 export type Adjustments = Partial<Record<typeof ADJUSTMENTS[number]['key'], number>>;
-export interface VisualSettings { effects?: VisualEffect[]; adjustments?: Adjustments; fadeIn?: number; fadeOut?: number; duration: number; transparency?: number; intensity?: number; speed?: number; offset?: number; effectSpan?: number }
+export interface VisualSettings { effects?: VisualEffect[]; adjustments?: Adjustments; fadeIn?: number; fadeOut?: number; duration: number; transparency?: number; intensity?: number; speed?: number; offset?: number; effectSpan?: number; speedLevel?:number }
 export const effectAmount = (settings: VisualSettings) => (settings.intensity ?? 5)/5;
 export function colorSettings(settings: VisualSettings) {
   const a = { brightness:0, contrast:0, saturation:0, exposure:0, temperature:0, tint:0, sharpness:0, ...settings.adjustments };
@@ -32,8 +33,8 @@ export function colorSettings(settings: VisualSettings) {
   return a;
 }
 export function motionAt(settings: VisualSettings, elapsed: number) {
-  const clock=(elapsed+(settings.offset || 0))*(settings.speed ?? 5)/5;
-  const p = Math.max(0, Math.min(1, clock / Math.max(.04,settings.effectSpan ?? settings.duration)));
+  const clock=(elapsed*clipRate(settings)+(settings.offset || 0))*(settings.speed ?? 5)/5;
+  const p = Math.max(0, Math.min(1, clock / Math.max(.04,settings.effectSpan ?? settings.duration*clipRate(settings))));
   const fx = settings.effects || [];
   const amount=effectAmount(settings);
   let zoom = (fx.includes('zoom_in') ? 1+.25*amount*p : 1) * (fx.includes('zoom_out') ? 1+.25*amount*(1-p) : 1);
@@ -52,7 +53,7 @@ export function effectMix(settings:VisualSettings, elapsed:number, type?:string)
   const fade=clipAlpha({...settings,transparency:100},elapsed);
   if(type==='dissolvenza')return Math.max(0,Math.min(1,fade*effectAmount(settings)));
   const moving=['camera_shake','zoom_in','zoom_out'].includes(type || '');
-  const clock=(elapsed+(settings.offset||0))*(settings.speed??5)/5;
+  const clock=(elapsed*clipRate(settings)+(settings.offset||0))*(settings.speed??5)/5;
   return fade*(moving?1:.9+.1*Math.cos(clock*Math.PI*2));
 }
 export function adjustPixels(data: Uint8ClampedArray, settings: VisualSettings) {

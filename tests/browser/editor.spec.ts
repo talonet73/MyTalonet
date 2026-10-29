@@ -10,7 +10,7 @@ test.beforeAll(()=>{
   execFileSync('ffmpeg',['-v','error','-y','-f','lavfi','-i','color=lime:s=320x180','-frames:v','1','-threads','1',green]);
 });
 test('real import, preview, MCP changes, linked cut/undo, project save/reopen and video export',async({page,request})=>{
-  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+  const errors:string[]=[];page.on('pageerror',e=>{errors.push(e.message);console.error(e.stack);});
   await page.goto('/');
   await expect(page.getByText('Nessun file nello stage')).toBeVisible();
   // Top toolbar import uses the App file input, not the stage-specific one.

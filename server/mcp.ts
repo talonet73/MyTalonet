@@ -25,7 +25,7 @@ export function installMcp(app: Express) {
   app.put('/api/editor/state', (req, res) => {
     const next = req.body?.state;
     if (req.body?.revision !== revision) { res.status(409).json(snapshot()); return; }
-    if (!next || !Array.isArray(next.clips) || !Array.isArray(next.tracks) || !Array.isArray(next.subtitles) || !Array.isArray(next.mediaAssets) || next.clips.length > 2200 || next.tracks.length > 100 || next.mediaAssets.length > 1000 || next.subtitles.length > 1000 || typeof next.currentTime !== 'number' || !Number.isFinite(next.currentTime) || !['16:9','9:16','1:1','4:3'].includes(next.aspectRatio)) { res.status(400).json({ error: 'Stato timeline non valido.' }); return; }
+    if (!next || !Array.isArray(next.clips) || !Array.isArray(next.tracks) || !Array.isArray(next.subtitles) || !Array.isArray(next.mediaAssets) || next.mediaAssets.length > 1000 || next.subtitles.length > 1000 || typeof next.currentTime !== 'number' || !Number.isFinite(next.currentTime) || !['16:9','9:16','1:1','4:3'].includes(next.aspectRatio)) { res.status(400).json({ error: 'Stato timeline non valido.' }); return; }
     state = next; revision++; broadcast(); res.json(snapshot());
   });
   app.post('/api/editor/connection', (req, res) => { enabled = req.body.enabled === true; broadcast(); res.json(snapshot()); });

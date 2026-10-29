@@ -1,3 +1,4 @@
+import {clipRate} from './clipSpeed';
 import type { TimelineClip, Track, SubtitleItem, MediaAsset } from '../types/editor';
 export interface TimelineState {
   clips: TimelineClip[];
@@ -52,7 +53,7 @@ export function applyTimelineTool(state: TimelineState, name: string, args: Reco
     if (targets.some(c => time <= c.startTime || time >= c.startTime + c.duration)) throw new Error('Il taglio deve cadere all’interno della clip e dell’audio collegato.');
     const ids = new Map(targets.map(c => [c.id, uid()]));
     const left = state.clips.map(c => ids.has(c.id) ? { ...c, duration: time - c.startTime } : c);
-    const right = targets.map(c => ({ ...c, id: ids.get(c.id)!, startTime: time, duration: c.duration - (time - c.startTime), offset: (c.offset || 0) + time - c.startTime, linkedClipId: linked ? ids.get(c.linkedClipId!) : undefined, isLinked: Boolean(linked) }));
+    const right = targets.map(c => ({ ...c, id: ids.get(c.id)!, startTime: time, duration: c.duration - (time - c.startTime), offset: (c.offset || 0) + (time - c.startTime)*clipRate(c), linkedClipId: linked ? ids.get(c.linkedClipId!) : undefined, isLinked: Boolean(linked) }));
     return { ...state, clips: [...left, ...right], selectedClipId: ids.get(target.id)!, currentTime: time };
   }
   let updates: Partial<TimelineClip>;

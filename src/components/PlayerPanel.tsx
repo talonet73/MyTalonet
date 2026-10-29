@@ -62,7 +62,7 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
     .filter(c => c.type === 'video')
     .map(c => ({
       id: c.id,
-      name: c.name,
+      name: c.name,speedLevel:c.speedLevel,
       transparency: c.transparency,
       effects: c.effects, adjustments: c.adjustments,
       volumeDb: c.volumeDb,
@@ -81,7 +81,7 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
     .filter(c => c.type === 'audio')
     .map(c => ({
       id: c.id,
-      name: c.name,
+      name: c.name,speedLevel:c.speedLevel,
       volumeDb: c.volumeDb,
       fadeIn:c.fadeIn,fadeOut:c.fadeOut,
       startTime: c.startTime,
@@ -94,7 +94,7 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
     .filter(c => c.type === 'effect')
     .map(c => ({
       id: c.id,
-      name: c.name,
+      name: c.name,speedLevel:c.speedLevel,
       fadeIn: c.fadeIn,
       fadeOut: c.fadeOut,
       startTime: c.startTime,
@@ -107,7 +107,7 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
     .filter(c => c.type === 'image')
     .map(c => ({
       id: c.id,
-      name: c.name,
+      name: c.name,speedLevel:c.speedLevel,
       transparency: c.transparency,
       effects: c.effects, adjustments: c.adjustments,
       volumeDb: c.volumeDb,
@@ -128,12 +128,16 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
     return () => playbackEngine.setOnFrameReady(null);
   }, [currentTime, videoClips, effectClips, imageClips, subtitles]);
 
-  // Sync real media elements (video, audio) and draw frame
+  // Prepare paused frames explicitly as well as listening for decoder events.
   useEffect(() => {
+    let cancelled=false;
     playbackEngine.syncMedia(currentTime, isPlaying, videoClips, audioClips, isMuted);
-    if (canvasRef.current) {
-      playbackEngine.renderFrame(canvasRef.current, currentTime, videoClips, effectClips, imageClips, subtitles);
+    const canvas=canvasRef.current;
+    if(canvas){
+      if(isPlaying)playbackEngine.renderFrame(canvas,currentTime,videoClips,effectClips,imageClips,subtitles);
+      else void playbackEngine.prepareAndRenderFrame(canvas,currentTime,videoClips,effectClips,imageClips,subtitles,()=>!cancelled);
     }
+    return()=>{cancelled=true;};
   }, [currentTime, isPlaying, clips, subtitles, isMuted]);
 
   // Pause everything on unmount

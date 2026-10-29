@@ -1,3 +1,4 @@
+import {clipRate} from '../services/clipSpeed';
 import {DraggableWindow} from './DraggableWindow';
 import {useEffect,useRef,useState} from 'react';
 import {X} from 'lucide-react';
@@ -14,7 +15,7 @@ export function BGRemoverPanel({open,selected,onClose,onComplete}:{open:boolean;
     async function poll(){try{const response=await fetch(`/api/background/${job.id}`);const result=await response.json();if(!response.ok)throw new Error(result.error || 'Elaborazione non disponibile.');if(stopped)return;setJob(result);if(result.status==='complete' && originalRef.current)completionRef.current(result.asset,originalRef.current);if(result.status==='error')setError(result.error);if(result.status==='running')timer=setTimeout(poll,1000);}catch(e){if(!stopped){setError((e as Error).message);setJob((old:any)=>({...old,status:'error'}));}}}
     timer=setTimeout(poll,300);return()=>{stopped=true;clearTimeout(timer);};
   },[job?.id,job?.status]);
-  async function start(){if(!selected)return;setError('');originalRef.current={...selected};setJob({status:'starting',progress:0});try{const response=await fetch('/api/background',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mediaUrl:selected.mediaUrl,type:selected.type,offset:selected.offset || 0,duration:selected.duration})});const result=await response.json();if(!response.ok)throw new Error(result.error || 'Rimozione non avviata.');setJob({id:result.jobId,status:'running',progress:0});}catch(e){setError((e as Error).message);setJob(null);}}
+  async function start(){if(!selected)return;setError('');originalRef.current={...selected};setJob({status:'starting',progress:0});try{const response=await fetch('/api/background',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mediaUrl:selected.mediaUrl,type:selected.type,offset:selected.offset || 0,duration:selected.duration*clipRate(selected)})});const result=await response.json();if(!response.ok)throw new Error(result.error || 'Rimozione non avviata.');setJob({id:result.jobId,status:'running',progress:0});}catch(e){setError((e as Error).message);setJob(null);}}
   async function cancel(){try{const response=await fetch(`/api/background/${job.id}`,{method:'DELETE'});const result=await response.json();if(!response.ok)throw new Error(result.error || 'Annullamento non riuscito.');setJob(result);}catch(e){setError((e as Error).message);}}
   if(!open)return null;
   const running=job?.status==='running'||job?.status==='starting';

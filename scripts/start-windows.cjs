@@ -2,6 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const os = require('node:os');
 const { spawn, spawnSync } = require('node:child_process');
 const root = path.resolve(__dirname, '..');
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -30,6 +31,9 @@ async function main() {
   if (!local) throw new Error('Non trovo la cartella personale di Windows.');
   const cache = path.join(local, 'TALEDIT');
   const env = { ...process.env, WHISPER_PYTHON: path.join(cache, 'whisper-env', 'Scripts', 'python.exe'), WHISPER_MODEL_DIR: path.join(cache, 'whisper-small'), HF_HOME: path.join(cache, 'huggingface'), HF_XET_CACHE: path.join(cache, 'huggingface', 'xet'), BG_PYTHON:path.join(cache,'bg-env','Scripts','python.exe'),BG_MODEL_DIR:path.join(cache,'bg-models'),npm_config_cache: path.join(cache, 'npm') };
+  // Use the Windows Known Folder path, including redirected Downloads folders.
+  const downloads=spawnSync('powershell.exe',['-NoProfile','-Command',"$d=(Get-ItemProperty -LiteralPath 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders').'{374DE290-123F-4565-9164-39C4925E467B}'; if($d){[Environment]::ExpandEnvironmentVariables($d)}"],{encoding:'utf8',windowsHide:true});
+  env.SCREENSHOT_DIR=downloads.status===0 && downloads.stdout.trim()?downloads.stdout.trim():path.join(os.homedir(),'Downloads');
   fs.mkdirSync(cache, {recursive:true});
   const lockHash = crypto.createHash('sha256').update(fs.readFileSync(path.join(root, 'package-lock.json'))).digest('hex');
   const marker = path.join(root, 'node_modules', '.taledit-lock');

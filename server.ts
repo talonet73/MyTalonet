@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import {saveScreenshotToDownloads} from './server/screenshot';
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'node:path';
@@ -47,7 +48,7 @@ export async function createApp(production = process.env.NODE_ENV === 'productio
   app.post(['/api/export','/api/screenshot'], async (req, res, next) => {
     if (exportsRunning >= 2) { res.status(429).json({ success: false, error: 'Attendi le esportazioni in corso.' }); return; }
     exportsRunning++;
-    try { res.json(await exportMedia(req.path==='/api/screenshot'?{...req.body,format:'png'}:req.body || {},{screenshot:req.path==='/api/screenshot'})); } catch (error) { next(error); } finally { exportsRunning--; }
+    try { const screenshot=req.path==='/api/screenshot';const result=await exportMedia(screenshot?{...req.body,format:'png'}:req.body || {},{screenshot});res.json({...result,...(screenshot?{savedToDownloads:await saveScreenshotToDownloads(result)}:{})}); } catch (error) { next(error); } finally { exportsRunning--; }
   });
   app.post('/api/youtube/download', (req, res, next) => {
     try { const job = startYoutubeDownload(req.body?.url); res.status(202).json({ jobId: job.id }); } catch (error) { next(error); }

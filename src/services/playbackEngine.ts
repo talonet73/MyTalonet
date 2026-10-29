@@ -1,3 +1,4 @@
+import {clipRate,sourceTime} from './clipSpeed';
 import { adjustPixels, clipAlpha, colorSettings, motionAt, effectAmount, effectMix, type VisualSettings } from './visualSettings';
 /**
  * Real Media & Canvas Rendering Engine for TALEDIT
@@ -20,6 +21,7 @@ export interface VideoClipData extends Partial<VisualSettings> {
 }
 
 export interface AudioClipData {
+  speedLevel?:number;
   id: string;
   name: string;
   volumeDb: number;
@@ -101,7 +103,8 @@ export class PlaybackEngine {
   }
   public syncMedia(time: number, playing: boolean, videos: VideoClipData[], audios: AudioClipData[], muted: boolean) {
     const videoIds = new Set<string>(), audioIds = new Set<string>();
-    const sync = (element: HTMLMediaElement, target: number) => {
+    const sync = (element: HTMLMediaElement, target: number,rate:number) => {
+      element.playbackRate=rate;element.preservesPitch=true;
       if (Number.isFinite(element.duration) && target >= element.duration) { element.pause(); return; }
       if (!element.seeking && Math.abs(element.currentTime - target) > (playing ? .15 : .015)) element.currentTime = target;
       if (playing && element.paused) void element.play().catch(() => {});
@@ -111,12 +114,12 @@ export class PlaybackEngine {
       videoIds.add(clip.id); const element = this.getVideoElement(clip.mediaUrl, clip.id);
       element.muted = muted || Boolean(clip.hasSeparateAudioClip);
       if (!clip.hasSeparateAudioClip) this.gain(element, clip.volumeDb || 0, muted, playing, clipAlpha({...clip,transparency:100},time-clip.startTime));
-      sync(element, Math.max(0, time - clip.startTime + (clip.offset || 0)));
+      sync(element, Math.max(0, sourceTime(clip,time)),clipRate(clip));
     }
     for (const clip of audios) if (clip.mediaUrl && time >= clip.startTime && time < clip.startTime + clip.duration) {
       audioIds.add(clip.id); const element = this.getAudioElement(clip.mediaUrl, clip.id);
       element.muted = muted; this.gain(element, clip.volumeDb, muted, playing, clipAlpha({...clip,transparency:100},time-clip.startTime));
-      sync(element, Math.max(0, time - clip.startTime + (clip.offset || 0)));
+      sync(element, Math.max(0, sourceTime(clip,time)),clipRate(clip));
     }
     for (const [key, element] of this.videoCache) if (!videoIds.has(key)) element.pause();
     for (const [key, element] of this.audioCache) if (!audioIds.has(key)) element.pause();
@@ -132,16 +135,18 @@ export class PlaybackEngine {
   public async preloadVideos(videos: VideoClipData[]) {
     await Promise.all(videos.filter(c => c.mediaUrl).map(c => { const element = this.getVideoElement(c.mediaUrl!, c.id); return this.waitFor(element, 'loadeddata', () => element.readyState >= 2 || Boolean(element.error)); }));
   }
-  public async prepareAndRenderFrame(canvas: HTMLCanvasElement, time: number, videos: VideoClipData[], effects: EffectClipData[], images: ImageClipData[], subtitles: SubtitleData[]) {
+  public async prepareAndRenderFrame(canvas: HTMLCanvasElement, time: number, videos: VideoClipData[], effects: EffectClipData[], images: ImageClipData[], subtitles: SubtitleData[], shouldRender=()=>true) {
     const active = videos.filter(v => time >= v.startTime && time < v.startTime + v.duration);
     await this.preloadVideos(active);
+    if(!shouldRender())return;
     await Promise.all(active.filter(c => c.mediaUrl).map(async c => {
+      if(!shouldRender())return;
       const element = this.getVideoElement(c.mediaUrl!, c.id);
-      const target = Math.min(Math.max(0, element.duration - .001), time - c.startTime + (c.offset || 0));
+      const target = Math.min(Math.max(0, element.duration - .001), sourceTime(c,time));
       if (Number.isFinite(target) && Math.abs(element.currentTime - target) > .015) { element.currentTime = target; await this.waitFor(element, 'seeked', () => !element.seeking); }
     }));
     await Promise.all(images.filter(c => c.mediaUrl).map(c => this.getImageElement(c.mediaUrl!).decode().catch(() => {})));
-    this.renderFrame(canvas, time, videos, effects, images, subtitles);
+    if(shouldRender())this.renderFrame(canvas, time, videos, effects, images, subtitles);
   }
   public renderFrame(canvas: HTMLCanvasElement, time: number, videos: VideoClipData[], effects: EffectClipData[], images: ImageClipData[], subtitles: SubtitleData[]) {
     const ctx=canvas.getContext('2d');if(!ctx)return;

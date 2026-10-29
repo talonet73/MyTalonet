@@ -50,9 +50,9 @@ La regressione conserva le prove precedenti di container MP4/MOV/AVI/MP3/WAV, to
 ## Esiti e limiti
 
 - `npm run lint`: **PASS**, verifica TypeScript.
-- `npm test`: **PASS, 47/47**, test reali/di integrazione sui contenuti e sulle operazioni.
+- `npm test`: **PASS, 62/62**, test reali/di integrazione sui contenuti e sulle operazioni.
 - `npm run test:whisper`: **PASS**, parlato noto e silenzio reali.
-- `npm run test:e2e`: **PASS, 19/19** scenari Chromium, con numerose azioni e verifiche per ciascuno; il numero di scenari non è il numero di pulsanti.
+- `npm run test:e2e`: **PASS, 22/22** scenari Chromium, con numerose azioni e verifiche per ciascuno; il numero di scenari non è il numero di pulsanti.
 - Build di produzione eseguita dal runner browser e `git diff --check`: **PASS**.
 - `bash scripts/setup-bg.sh`: installazione ripetibile e modello U2NetP pronti. Dipendenze Python separate da Whisper; `pip check` senza conflitti.
 - Controllo di disponibilità dei pacchetti per Python 3.12 / Windows a 64 bit effettuato con il risolutore pip; non equivale all’esecuzione su Windows.
@@ -68,3 +68,5 @@ La prova video costruisce una clip dalla stessa fotografia con un tono a 440 Hz,
 Queste sono prove di segmentazione e video effettivi, non risposte simulate. Il video di riferimento deriva da una foto ripetuta: non dimostra qualità su qualsiasi movimento, scena complessa, capelli o più soggetti. Il modello usa salienza e posizione, non identifica semanticamente una persona scelta dall’utente. In scene difficili la scelta del soggetto e i bordi possono essere imprecisi. L’elaborazione CPU non è in tempo reale. La cancellazione ad albero dei processi su Windows è predisposta ma non eseguita in questo ambiente.
 
 Nuovo flusso Captions: Trascrivi audio → correggi → GENERATE → pista TESTO. I testi sono ora clip della timeline. Dettagli e ulteriori prove: [timeline-export-verification.md](timeline-export-verification.md).
+
+Aggiornamento del 29 ottobre 2026: [velocità, Screenshot e livelli](speed-layers-verification.md).

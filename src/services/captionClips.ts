@@ -9,7 +9,7 @@ export function captionClips(subtitles:SubtitleItem[],clips:TimelineClip[],track
     const old=existing.get(sub.id),text=bilingual && sub.translation?`${sub.text}\n${sub.translation}`:sub.text;
     next.push({id:old?.id || crypto.randomUUID(),type:'text',trackId:old?.trackId || track.id,name:text.slice(0,35),text,captionId:sub.id,startTime:sub.startTime,duration:sub.endTime-sub.startTime,offset:0,color:'#f97316',transparency:100,volumeDb:0,fadeIn:0,fadeOut:0});
   }
-  if(next.length>2200 || next.filter(c=>c.type==='text').length>2000)throw new Error('Troppi mattoncini: massimo 2200.');
+  if(next.filter(c=>c.type==='text').length>2000)throw new Error('Troppi mattoncini di testo: massimo 2000.');
   return {clips:next,tracks:tracks.includes(track)?tracks:[...tracks,track]};
 }
 export function timelineSubtitles(clips:TimelineClip[]):SubtitleItem[]{const tracks=[...new Set(clips.filter(c=>c.type==='text').map(c=>c.trackId))];return clips.filter(c=>c.type==='text' && c.text).map(c=>({id:c.id,text:c.text!,startTime:c.startTime,endTime:c.startTime+c.duration,row:tracks.indexOf(c.trackId),transparency:c.transparency,fadeIn:c.fadeIn,fadeOut:c.fadeOut}));}
