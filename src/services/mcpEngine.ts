@@ -1,3 +1,4 @@
+import {mediaTools} from './mediaTools';
 import { timelineTools, applyTimelineTool } from './timelineTools';
 import { TimelineClip, Track, SubtitleItem, ClaudePromptMessage } from '../types/editor';
 
@@ -19,7 +20,7 @@ export const CLAUDE_MCP_CONFIG = {
     sse: "/api/mcp/sse",
     messages: "/api/mcp/messages"
   },
-  availableTools: timelineTools
+  availableTools: [...timelineTools,...mediaTools]
 };
 
 // Generates the JSON snippet to paste into claude_desktop_config.json

@@ -55,9 +55,9 @@ Il test browser provoca un errore 403 controllato e successivamente carica un ve
 ## Esito finale dei comandi eseguiti
 
 - `npm run lint`: **PASS**, controllo TypeScript.
-- `npm test`: **PASS, 102/102**, inclusa la trascrizione reale via API, export, mix, immagini, mute/solo e MCP HTTP/SSE.
+- `npm test`: **PASS, 108/108**, inclusa la trascrizione reale via API, export, mix, immagini, mute/solo e MCP HTTP/SSE.
 - `npm run test:whisper`: **PASS**, riconoscimento di parlato noto e assenza di testo sul silenzio.
-- `npm run test:e2e`: **PASS, 32/32** test browser, inclusi fallback locale dopo 403 e download dell’export reale.
+- `npm run test:e2e`: **PASS, 34/34** test browser, inclusi fallback locale dopo 403 e download dell’export reale.
 - `git diff --check`: **PASS**, verifica formale delle modifiche.
 - `pip check`: **PASS**, nessun requisito incompatibile.
 - Build produzione eseguita dal runner browser: **PASS**.
@@ -76,3 +76,5 @@ Aggiornamento COLOR del 30 ottobre 2026: [controlli, monitor e scopes](color-ver
 Aggiornamento strumenti intelligenti del 30 ottobre 2026: [ricerca GitHub, tagli assistiti, parole evidenziate, maschere e fullscreen](github-ai-research.md).
 
 Correzione del flusso AI Cut e icone: [scansione automatica completa e verifiche](automatic-cut-verification.md).
+
+Continuità dei tagli e video ricevuti da MCP: [correzioni e verifiche](cut-continuity-mcp-verification.md).

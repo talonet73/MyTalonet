@@ -172,3 +172,9 @@ In **Captions**, una nuova trascrizione include i tempi delle singole parole. **
 **Pen Mask** permette di disegnare tracciati Bézier, spostare nodi e maniglie, invertire e sfumare la maschera. Premi **Full** nel player per lavorare a tutto schermo mantenendo la penna. Anche le finestre degli strumenti già aperti, come Adjustment, rimangono disponibili a tutto schermo. Le maschere vengono salvate nel progetto ed esportate con la trasparenza corretta.
 
 Ricerca GitHub, licenze, scelte, limiti e verifiche: [docs/github-ai-research.md](docs/github-ai-research.md). Non servono nuove dipendenze o ulteriori modelli rispetto all’installazione precedente.
+
+## Video generati da Claude e continuità dei tagli
+
+Dopo l’aggiornamento ricollega Claude e chiedigli **«Inserisci il video appena creato nella timeline di TALEDIT usando MCP»**. Il nuovo strumento `import_media` riceve file dal PC di TALEDIT, URL HTTPS scaricabili o byte del file; per file grandi sono disponibili i comandi di trasferimento a blocchi. L’importazione inserisce automaticamente video e audio collegato, crea le piste necessarie e porta il cursore sul nuovo media. `export_video` genera il montaggio reale e può inserirne automaticamente il risultato nella timeline. Il solo collegamento MCP non trasferisce un allegato rimasto nella chat o un percorso del sandbox remoto.
+
+Le giunzioni dei tagli vengono riagganciate e i decoder successivi preparati in anticipo. Player ed export evitano i fotogrammi neri introdotti dal cambio clip, conservando gli spazi intenzionali del montaggio. Dettagli e verifiche: [docs/cut-continuity-mcp-verification.md](docs/cut-continuity-mcp-verification.md).

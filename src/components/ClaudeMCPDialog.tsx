@@ -330,6 +330,7 @@ export const ClaudeMCPDialog: React.FC<ClaudeMCPDialogProps> = ({
             <div className="text-gray-300 mb-2">
               Strumenti MCP esposti da TALEDIT a disposizione dei prompt di Claude:
             </div>
+            <p className="p-2 border border-cyan-800 rounded text-cyan-100">Per un video appena creato, chiedi a Claude di usare import_media: il file viene inserito nello stage e nella timeline con il suo audio. Se il file è nel sandbox della chat, serve trasferirne i byte oppure fornire un link scaricabile. Dopo l’aggiornamento ricollega Claude per aggiornare l’elenco degli strumenti.</p>
             {CLAUDE_MCP_CONFIG.availableTools.map(tool => (
               <div
                 key={tool.name}

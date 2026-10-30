@@ -1,3 +1,5 @@
+import {mediaTools} from '../src/services/mediaTools';
+import {createMediaToolHandler} from './mcpMedia';
 import type { Express, RequestHandler, Response } from 'express';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
@@ -45,12 +47,14 @@ export function installMcp(app: Express) {
     if (origin && new URL(origin).host !== req.get('host')) { res.status(403).json({ error: 'Origine non consentita.' }); return; }
     next();
   };
+  const mediaHandler=createMediaToolHandler(()=>state,next=>{state=next;revision++;broadcast();},()=>enabled);
   const makeServer = () => {
     const server = new Server({ name: 'TALEDIT', version: '2.0.0' }, { capabilities: { tools: {} } });
-    server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: timelineTools }));
+    server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: [...timelineTools,...mediaTools] }));
     server.setRequestHandler(CallToolRequestSchema, async request => {
       try {
         if (!enabled) throw new Error('Collegamento MCP spento. Attivalo in TALEDIT.');
+        if(mediaTools.some(t=>t.name===request.params.name)){const result=await mediaHandler(request.params.name,request.params.arguments||{});return {content:[{type:'text',text:JSON.stringify({success:true,...result,...snapshot()})}]};}
         const next = applyTimelineTool(state, request.params.name, request.params.arguments || {});
         if (next !== state) { state = next; revision++; broadcast(); }
         return { content: [{ type: 'text', text: JSON.stringify({ success: true, ...snapshot() }) }] };

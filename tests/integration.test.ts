@@ -130,7 +130,7 @@ for(const mode of ['http','sse']) test(`MCP ${mode} SDK handshake, real tools, l
   const transport=mode==='http'?new StreamableHTTPClientTransport(new URL(base+'/api/mcp')):new SSEClientTransport(new URL(base+'/api/mcp/sse'));
   try {
     await client.connect(transport);
-    assert.equal((await client.listTools()).tools.length,8);
+    assert.equal((await client.listTools()).tools.length,13);
     const call=async(name:string,args:any={})=>client.callTool({name,arguments:args});
     const initial=await call('get_timeline_state'); assert.equal(initial.isError,undefined); assert.equal(JSON.parse((initial.content as any)[0].text).state.clips.length,2);
     assert.equal((await call('cut_clip_at_time',{timeSeconds:.75})).isError,undefined);
@@ -422,3 +422,28 @@ test('automatic scan reaches audio beyond ten minutes without truncating at the 
 });
 
 test('automatic AI Cut detects a real sub-quarter-second pause and retains exactly 0.2 seconds',async()=>{const file=path.join(temp,'short-pause.wav');await ff(['-f','lavfi','-i','aevalsrc=if(between(t\\,0.3\\,0.58)\\,0\\,0.1*sin(2*PI*440*t)):s=48000:d=0.9',file]);const asset=await upload(file);for(const margin of [.2,.3]){const res=await api('/api/smart-cut',{mode:'automatic',margin,clips:[clip(asset,{type:'audio',duration:.9})],durationSec:.9});assert.equal(res.status,202);let job:any;for(let i=0;i<100;i++){job=(await api(`/api/captions/${res.data.jobId}`)).data;if(job.status!=='running')break;await new Promise(r=>setTimeout(r,50));}assert.equal(job.status,'complete',JSON.stringify(job));if(margin===.2){assert.equal(job.candidates.length,1);assert.ok(Math.abs(job.candidates[0].start-.4)<.005);assert.ok(Math.abs(job.candidates[0].end-.48)<.005);}else assert.equal(job.candidates.length,0);}});
+
+test('cut seams never introduce black frames in an exported colored video',async()=>{const {rippleRemove}=await import('../src/services/smartCut');const result=rippleRemove([clip(video)],[{start:.11,end:.21},{start:.41,end:.52},{start:.81,end:.93},{start:1.21,end:1.34},{start:1.61,end:1.77}]);const out=await exported({clips:result.clips,durationSec:result.duration});const {stdout}=await promisify(execFile)('ffmpeg',['-v','error','-i',out.file,'-vf','scale=1:1','-pix_fmt','rgb24','-f','rawvideo','pipe:1'],{encoding:'buffer'});let black=0;for(let i=0;i<stdout.length;i+=3)if(Math.max(stdout[i],stdout[i+1],stdout[i+2])<30)black++;assert.equal(black,0,`Black frames: ${black} / ${stdout.length/3}`);});
+
+for(const mode of ['http','sse'])test(`MCP ${mode} imports generated local and transferred videos directly into the timeline`,async()=>{
+  const previous=(await api('/api/editor/state')).data;await api('/api/editor/state',{revision:previous.revision,state:{clips:[],tracks:[],subtitles:[],mediaAssets:[],currentTime:0,selectedClipId:null,aspectRatio:'16:9'}},'PUT');await api('/api/editor/connection',{enabled:true});
+  const client=new Client({name:'generated-video-test',version:'1'}),transport=mode==='http'?new StreamableHTTPClientTransport(new URL(base+'/api/mcp')):new SSEClientTransport(new URL(base+'/api/mcp/sse'));
+  try{
+    await client.connect(transport);const call=async(name:string,args:any={})=>{const r=await client.callTool({name,arguments:args});assert.equal(r.isError,undefined,JSON.stringify(r));return JSON.parse((r.content as any)[0].text);};
+    const local=await call('import_media',{sourcePath:path.join(temp,'fixture.mp4'),fileName:'Claude_generated.mp4'});assert.equal(local.state.mediaAssets.length,1);assert.equal(local.clipIds.length,2);const v=local.state.clips.find((c:any)=>c.type==='video');const a=local.state.clips.find((c:any)=>c.id===v.linkedClipId);assert.equal(a.linkedClipId,v.id);assert.equal(a.startTime,v.startTime);
+    const bytes=await fs.readFile(path.join(temp,'fixture.mp4')),begin=await call('begin_media_upload',{fileName:'Claude_remote.mp4',totalBytes:bytes.length});
+    const incomplete=await client.callTool({name:'finish_media_upload',arguments:{uploadId:begin.uploadId}});assert.equal(incomplete.isError,true);
+    const half=Math.floor(bytes.length/2);await call('upload_media_chunk',{uploadId:begin.uploadId,offset:0,dataBase64:bytes.subarray(0,half).toString('base64')});
+    assert.equal((await client.callTool({name:'upload_media_chunk',arguments:{uploadId:begin.uploadId,offset:0,dataBase64:bytes.subarray(half).toString('base64')}})).isError,true);
+    await call('upload_media_chunk',{uploadId:begin.uploadId,offset:half,dataBase64:bytes.subarray(half).toString('base64')});const done=await call('finish_media_upload',{uploadId:begin.uploadId});assert.equal(done.state.clips.length,4);assert.equal(done.state.mediaAssets.length,2);assert.deepEqual(await fs.readFile(path.join(temp,path.basename(done.asset.fileUrl))),bytes);const second=done.state.clips.find((c:any)=>c.id===done.clipIds[0]);assert.equal(second.startTime,2);
+    const again=await call('finish_media_upload',{uploadId:begin.uploadId});assert.equal(again.state.clips.length,4);assert.deepEqual(again.clipIds,done.clipIds);
+    const inline=await call('import_media',{fileName:'Claude_small.mp4',dataBase64:bytes.toString('base64')});assert.equal(inline.state.clips.length,6);
+    assert.equal((await client.callTool({name:'import_media',arguments:{fileName:'bad.mp4',dataBase64:Buffer.from('not video').toString('base64')}})).isError,true);assert.equal((await api('/api/editor/state')).data.state.clips.length,6);
+    assert.equal((await client.callTool({name:'import_media',arguments:{url:'https://127.0.0.1/private.mp4'}})).isError,true);
+    await api('/api/editor/connection',{enabled:false});assert.equal((await client.callTool({name:'import_media',arguments:{sourcePath:path.join(temp,'fixture.mp4')}})).isError,true);
+  }finally{await client.close();}
+});
+test('MCP rendering creates a real video and imports it automatically with linked sound',async()=>{
+  const old=(await api('/api/editor/state')).data;await api('/api/editor/state',{revision:old.revision,state:{clips:[clip(video)],tracks:[],subtitles:[],mediaAssets:[video],currentTime:0,selectedClipId:null,aspectRatio:'16:9'}},'PUT');await api('/api/editor/connection',{enabled:true});
+  const client=new Client({name:'mcp-export-test',version:'1'});try{await client.connect(new StreamableHTTPClientTransport(new URL(base+'/api/mcp')));const result=await client.callTool({name:'export_video',arguments:{resolution:'720p'}});assert.equal(result.isError,undefined,JSON.stringify(result));const out=JSON.parse((result.content as any)[0].text);assert.equal(out.state.clips.length,3);assert.ok(out.asset.hasAudio);assert.equal(out.clipIds.length,2);assert.ok((await fetch(base+out.downloadUrl)).ok);const generated=out.state.clips.find((c:any)=>c.id===out.clipIds[0]);assert.equal(generated.startTime,2);}finally{await client.close();}
+});

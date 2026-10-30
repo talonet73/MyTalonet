@@ -211,6 +211,7 @@ export default function App() {
   const sharedState = { audioMaster, clips, tracks, subtitles, mediaAssets, currentTime, selectedClipId, aspectRatio };
   useEditorSync(sharedState, remote => {
     const normalized=normalizeTrackAssignments(remote.clips,remote.tracks);remote={...remote,...normalized};
+    if(remote.selectedClipId&&!clipsRef.current.some(c=>c.id===remote.selectedClipId))setIsPlaying(false);
     setClips(remote.clips); clipsRef.current = remote.clips; pushHistory(remote.clips,remote.tracks,remote.audioMaster||{});
     setAudioMaster(remote.audioMaster||{});
     setTracks(remote.tracks); setSubtitles(remote.subtitles); setMediaAssets(remote.mediaAssets);
@@ -281,9 +282,9 @@ export default function App() {
 
     const loop = (now: number) => {
       if (isPlaying) {
-        const delta = (now - lastTime) / 1000;
+        const delta = Math.max(0, (now - lastTime) / 1000);
         setCurrentTime(t => {
-          const next = t + delta;
+          const next = Math.max(0, t + delta);
           if (next >= totalDuration) {
             setIsPlaying(false);
             return totalDuration;

@@ -15,7 +15,7 @@ import {categoryOf, EXPORT_FORMATS} from '../src/services/exportFormats';
 import {timelineSubtitles} from '../src/services/captionClips';
 import {clipAlpha} from '../src/services/visualSettings';
 import { ADJUSTMENTS, EFFECTS } from '../src/services/visualSettings';
-import type { TimelineClip, Track, SubtitleItem } from '../src/types/editor';
+import type { TimelineClip, Track, SubtitleItem, MediaAsset } from '../src/types/editor';
 
 const runFile = promisify(execFile);
 export const downloadsDir = path.resolve(process.env.MEDIA_DIR || 'media_downloads');
@@ -33,7 +33,7 @@ export function localMediaPath(url: string) {
   if (!name || name !== path.basename(name) || /[\\\x00-\x1f]/.test(name)) throw new InputError('Percorso media non valido.');
   return path.join(downloadsDir, name);
 }
-export async function describeMedia(file: string, name: string) {
+export async function describeMedia(file: string, name: string):Promise<MediaAsset> {
   let info;
   try { info = await probe(file); } catch { throw new InputError('File multimediale non leggibile o danneggiato.'); }
   const video = info.streams.find((s: any) => s.codec_type === 'video');
@@ -147,7 +147,7 @@ export async function exportMedia(body: any, options:{screenshot?:boolean}={}) {
       const hasMask=clip.mask?.closed&&clip.mask.enabled!==false;
       filters.push(`[${idx}:v]${visualFilters(still?{...clip,startTime:frameTime,fadeIn:0,fadeOut:0,transparency:clipAlpha(clip,frameTime-clip.startTime)*100,animationOffset:frameTime-clip.startTime}:clip,width,height,false,lutFile)}[${hasMask?v+'raw':v}]`);
       if(hasMask){const mi=input++;await fs.writeFile(path.join(temp,`mask-${idx}.png`),maskPng(clip.mask!,width,height));args.push('-loop','1','-framerate','25','-t',String(still ? .04 : clip.duration),'-i',path.join(temp,`mask-${idx}.png`));filters.push(`[${v}raw]split[${v}color][${v}alpha];[${v}alpha]alphaextract[${v}old];[${mi}:v]format=gray,setpts=PTS+${still?frameTime:clip.startTime}/TB[${v}mask];[${v}old][${v}mask]blend=all_mode=multiply[${v}new];[${v}color][${v}new]alphamerge[${v}]`);}
-      filters.push(`[${layer}][${v}]overlay=eof_action=pass:repeatlast=0:enable='gte(t,${clip.startTime})*lt(t,${clip.startTime + clip.duration})'[${next}]`); layer = next;
+      filters.push(`[${layer}][${v}]overlay=eof_action=repeat:repeatlast=1:enable='gte(t,${clip.startTime})*lt(t,${clip.startTime + clip.duration})'[${next}]`); layer = next;
     }
     if (audible) {
       const a = `a${idx}`;

@@ -1,3 +1,4 @@
+import {joinCutSeams} from './timelineContinuity';
 import type {TimelineClip,SubtitleItem} from '../types/editor';
 import {clipRate} from './clipSpeed';
 export interface CutRange {id:string;start:number;end:number;reason:'pause'|'filler'|'retake';label:string;selected:boolean}
@@ -30,5 +31,5 @@ export function rippleRemove(clips:TimelineClip[],ranges:{start:number;end:numbe
   const ids=new Map<string,string>(),parts:{clip:TimelineClip;original:TimelineClip;index:number}[]=[];
   for(const c of clips)keeps.forEach((keep,index)=>{const from=Math.max(c.startTime,keep.start),to=Math.min(c.startTime+c.duration,keep.end);if(to-from<.001)return;const id=crypto.randomUUID();ids.set(`${c.id}:${index}`,id);parts.push({original:c,index,clip:{...c,id,startTime:keep.target+from-keep.start,duration:to-from,offset:(c.offset||0)+(from-c.startTime)*clipRate(c),fadeIn:from===c.startTime?Math.min(c.fadeIn,to-from):0,fadeOut:to===c.startTime+c.duration?Math.min(c.fadeOut,to-from):0,effectSpan:c.type==='effect'?(c.effectSpan??c.duration*clipRate(c)):c.effectSpan}});});
   const next=parts.map(({clip,original,index})=>{const linked=original.isLinked&&original.linkedClipId?ids.get(`${original.linkedClipId}:${index}`):undefined;return {...clip,linkedClipId:linked,isLinked:!!linked};});
-  return {clips:next,duration:target,mapTime:(t:number)=>Math.max(0,t-cuts.reduce((sum,r)=>sum+Math.max(0,Math.min(t,r.end)-r.start),0))};
+  return {clips:joinCutSeams(next),duration:target,mapTime:(t:number)=>Math.max(0,t-cuts.reduce((sum,r)=>sum+Math.max(0,Math.min(t,r.end)-r.start),0))};
 }

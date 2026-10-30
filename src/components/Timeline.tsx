@@ -387,6 +387,12 @@ export const Timeline: React.FC<TimelineProps> = ({
     rulerTicks.push({ time: s, label });
   }
 
+  useEffect(()=>{
+    const selected=clips.find(c=>c.id===selectedClipId),lanes=lanesRef.current;if(!selected||!lanes)return;
+    const index=tracks.findIndex(t=>t.id===selected.trackId);if(index<0)return;
+    const x=selected.startTime*zoom;if(x<lanes.scrollLeft||x+Math.min(35,selected.duration*zoom)>lanes.scrollLeft+lanes.clientWidth)lanes.scrollLeft=Math.max(0,x-40);
+    const top=tracks.slice(0,index).reduce((sum,t)=>sum+rowHeight(t),0),height=rowHeight(tracks[index]);if(top<lanes.scrollTop||top+height>lanes.scrollTop+lanes.clientHeight)lanes.scrollTop=Math.max(0,top-10);
+  },[selectedClipId]);
   const playheadX = currentTime * zoom;
 
   const handleConfirmAddTrack = () => {

@@ -1,3 +1,4 @@
+import {joinCutSeams} from './timelineContinuity';
 import {clipRate} from './clipSpeed';
 import type { TimelineClip, Track, SubtitleItem, MediaAsset } from '../types/editor';
 export interface TimelineState {
@@ -55,7 +56,7 @@ export function applyTimelineTool(state: TimelineState, name: string, args: Reco
     const ids = new Map(targets.map(c => [c.id, uid()]));
     const left = state.clips.map(c => ids.has(c.id) ? { ...c, duration: time - c.startTime } : c);
     const right = targets.map(c => ({ ...c, id: ids.get(c.id)!, startTime: time, duration: c.duration - (time - c.startTime), offset: (c.offset || 0) + (time - c.startTime)*clipRate(c), linkedClipId: linked ? ids.get(c.linkedClipId!) : undefined, isLinked: Boolean(linked) }));
-    return { ...state, clips: [...left, ...right], selectedClipId: ids.get(target.id)!, currentTime: time };
+    return { ...state, clips: joinCutSeams([...left, ...right]), selectedClipId: ids.get(target.id)!, currentTime: time };
   }
   let updates: Partial<TimelineClip>;
   if (name === 'set_video_transparency') {

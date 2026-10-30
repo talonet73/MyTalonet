@@ -80,6 +80,7 @@ export class PlaybackEngine {
   private gainRoutes=new Map<HTMLMediaElement,AudioNode>();
   public audioLevel(id:string){return this.mixer?.level(id) || {peak:0,rms:0};}
   private gains = new Map<HTMLMediaElement, GainNode>();
+  private warming = new Map<string,string>();
   private onFrameReady: (() => void) | null = null;
   private notify = () => this.onFrameReady?.();
   public setOnFrameReady(callback: (() => void) | null) { this.onFrameReady = callback; }
@@ -105,6 +106,19 @@ export class PlaybackEngine {
     if (!image) { image = new Image(); image.crossOrigin = 'anonymous'; image.onload = this.notify; image.src = url; this.imageCache.set(url, image); }
     return image;
   }
+  private warmMedia(time:number,videos:VideoClipData[],audios:AudioClipData[]){
+    const warm=(clips:(VideoClipData|AudioClipData)[],video:boolean)=>{
+      const upcoming=clips.filter(c=>c.mediaUrl&&c.startTime>time&&c.startTime<=time+1.5).sort((a,b)=>a.startTime-b.startTime).slice(0,3);
+      for(const c of upcoming){const key=(video?'v:':'a:')+c.id,signature=`${c.mediaUrl}:${c.offset||0}`;if(this.warming.get(key)===signature)continue;this.warming.set(key,signature);
+        const element=video?this.getVideoElement(c.mediaUrl!,c.id):this.getAudioElement(c.mediaUrl!,c.id);
+        const seek=()=>{if(this.warming.get(key)!==signature)return;if(element.readyState>=1&&Math.abs(element.currentTime-(c.offset||0))>.01)element.currentTime=c.offset||0;};
+        if(element.readyState>=1)seek();else element.addEventListener('loadedmetadata',seek,{once:true});
+      }
+      // A long automatic cut can create thousands of clips; retain a small decoder working set.
+      const cache=video?this.videoCache:this.audioCache;
+      if(cache.size>16){const keep=new Set(clips.filter(c=>time>=c.startTime-.01&&time<c.startTime+c.duration).map(c=>c.id));upcoming.forEach(c=>keep.add(c.id));for(const [id,el] of cache){if(keep.has(id))continue;el.pause();el.removeAttribute('src');el.load();this.gains.get(el)?.disconnect();this.gains.delete(el);this.gainRoutes.delete(el);cache.delete(id);this.frameCache.delete(id);this.warming.delete((video?'v:':'a:')+id);}}
+    };warm(videos,true);warm(audios,false);
+  }
   private gain(element: HTMLMediaElement, db: number, muted: boolean, playing: boolean, amplitude = 1,trackId="") {
     // Do not create an AudioContext until the user starts playback.
     if (!playing) return;
@@ -119,6 +133,7 @@ export class PlaybackEngine {
   public syncMedia(time: number, playing: boolean, videos: VideoClipData[], audios: AudioClipData[], muted: boolean, tracks:Track[]=[], master?:AudioSettings) {
     if(playing&&!this.audioContext)this.audioContext=new AudioContext();
     if(this.audioContext){if(!this.mixer)this.mixer=new LiveAudioMixer(this.audioContext);this.mixer.configure(tracks,master,playing,muted);}
+    if(playing)this.warmMedia(time,videos,audios);
     const videoIds = new Set<string>(), audioIds = new Set<string>();
     const sync = (element: HTMLMediaElement, target: number,rate:number) => {
       element.playbackRate=rate;element.preservesPitch=true;
@@ -168,6 +183,8 @@ export class PlaybackEngine {
   public renderFrame(canvas: HTMLCanvasElement, time: number, videos: VideoClipData[], effects: EffectClipData[], images: ImageClipData[], subtitles: SubtitleData[]) {
     const ctx=canvas.getContext('2d');if(!ctx)return;
     const width=canvas.width,height=canvas.height;
+    // Keep the last composed frame during decoder handoff, never paint a transient black canvas.
+    for(const c of videos.filter(c=>c.mediaUrl&&time>=c.startTime&&time<c.startTime+c.duration)){const source=this.getVideoElement(c.mediaUrl!,c.id);if(!source.error&&(source.readyState<2||source.seeking))return;}
     ctx.clearRect(0,0,width,height);ctx.fillStyle='black';ctx.fillRect(0,0,width,height);
     const global=effects.filter(e=>time>=e.startTime && time<e.startTime+e.duration);
     const active=[...videos.map(c=>({...c,kind:'video'})),...images.map(c=>({...c,kind:'image'}))].filter(c=>time>=c.startTime && time<c.startTime+c.duration).sort((a,b)=>a.startTime-b.startTime || (a.layer||0)-(b.layer||0));
@@ -252,7 +269,7 @@ export class PlaybackEngine {
   public dispose() {
     this.pauseAll(); this.onFrameReady = null;
     for (const element of [...this.videoCache.values(), ...this.audioCache.values()]) { element.removeAttribute('src'); element.load(); }
-    this.videoCache.clear(); this.audioCache.clear(); this.imageCache.clear(); this.frameCache.clear(); this.gains.clear();this.gainRoutes.clear();this.mixer=null;
+    this.videoCache.clear(); this.audioCache.clear(); this.imageCache.clear(); this.frameCache.clear(); this.gains.clear();this.gainRoutes.clear();this.warming.clear();this.mixer=null;
     if (this.audioContext) void this.audioContext.close(); this.audioContext = null;
   }
 }
