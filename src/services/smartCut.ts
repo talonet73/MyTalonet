@@ -17,6 +17,11 @@ export function cleanupCandidates(silences:{start:number;end:number}[],subtitles
   for(let si=0;si<subtitles.length;si++){const s=subtitles[si],next=subtitles[si+1],tokens=(text:string)=>text.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu,'').split(/\s+/).filter(Boolean),a=tokens(s.text),b=next?tokens(next.text):[];if(next&&a.length>=4&&b.length>=4&&a.slice(0,4).join(' ')===b.slice(0,4).join(' ')&&next.startTime-s.endTime<8)out.push({id:crypto.randomUUID(),start:s.startTime,end:s.endTime,reason:'retake',label:`Possibile ripetizione: “${s.text.slice(0,100)}”`,selected:false});}
   return out.filter(r=>r.start>=0&&r.end<=duration&&r.end>r.start).sort((a,b)=>a.start-b.start);
 }
+/** Automatic mode shortens each complete pause to the requested total retained margin. */
+export function automaticCuts(silences:{start:number;end:number}[],duration:number,margin:number){
+  if(!Number.isFinite(margin)||margin<.5||margin>2)throw new Error('Margine pause da 0,5 a 2 secondi.');
+  return mergeRanges(silences,duration).filter(r=>r.end-r.start>margin+.04).map(r=>({id:crypto.randomUUID(),start:r.start+margin/2,end:r.end-margin/2,reason:'pause' as const,label:'Pausa accorciata automaticamente',selected:true}));
+}
 export function rippleRemove(clips:TimelineClip[],ranges:{start:number;end:number}[]){
   const duration=Math.max(0,...clips.map(c=>c.startTime+c.duration)),cuts=mergeRanges(ranges,duration);if(!cuts.length)throw new Error('Seleziona almeno un intervallo da rimuovere.');
   const keeps:{start:number;end:number;target:number}[]=[];let source=0,target=0;

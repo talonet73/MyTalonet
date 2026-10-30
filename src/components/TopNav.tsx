@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  Camera, FolderOpen,
+  Camera, FolderOpen, Bot, Plug, Unplug, WandSparkles,Blend, Captions, SlidersHorizontal, ScanLine, ScissorsLineDashed, PenTool,
   Save,
   PlusSquare,
   Share2,
@@ -76,7 +76,7 @@ export const TopNav: React.FC<TopNavProps> = ({
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
 
   const menuItems = ['File', 'Edit', 'View', 'Help'];
-  const tabs = ['Effects', 'Transitions', 'Captions', 'Adjustment', 'BG Remover', 'AI Cut', 'Pen Mask'];
+  const tabs = [{label:'Effects',icon:WandSparkles},{label:'Transitions',icon:Blend},{label:'Captions',icon:Captions},{label:'Adjustment',icon:SlidersHorizontal},{label:'BG Remover',icon:ScanLine},{label:'AI Cut',icon:ScissorsLineDashed},{label:'Pen Mask',icon:PenTool}];
 
   return (
     <div className="bg-[#0b0f19] border-b border-[#1e293b] select-none text-[#e2e8f0] text-xs">
@@ -161,7 +161,7 @@ export const TopNav: React.FC<TopNavProps> = ({
 
       {/* Main Action Tool Bar */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-[#0e1424] overflow-x-auto gap-2">
-        <button onClick={onOpenChatGPT} title="ChatGPT MCP" className="px-3 py-2 rounded bg-emerald-950 text-emerald-300 hover:bg-emerald-900 whitespace-nowrap font-bold">ChatGPT MCP</button>
+        <button onClick={onOpenChatGPT} title="ChatGPT MCP" className="flex items-center gap-2 px-3 py-2 rounded bg-emerald-950 text-emerald-300 hover:bg-emerald-900 whitespace-nowrap font-bold"><Bot aria-hidden="true" size={16}/>ChatGPT MCP</button>
         {/* Actions Left */}
         <div className="flex items-center gap-1">
           <button
@@ -283,18 +283,20 @@ export const TopNav: React.FC<TopNavProps> = ({
 
           {/* Mode Tabs */}
           <div className="flex items-center gap-1">
-            {tabs.map(tab => (
+            {tabs.map(({label:tab,icon:Icon}) => (
               <button
                 key={tab}
                 aria-expanded={activeTab === tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-3 py-1 rounded text-xs transition-colors ${
+                title={tab}
+                className={`flex flex-col items-center justify-center shrink-0 min-w-[62px] px-2 py-1 rounded text-xs transition-colors ${
                   activeTab === tab
                     ? 'bg-[#1e293b] text-cyan-400 font-semibold border border-[#334155]'
                     : 'text-gray-400 hover:text-white hover:bg-[#162032]'
                 }`}
               >
-                {tab}
+                <Icon aria-hidden="true" className="w-4 h-4 mb-0.5"/>
+                <span className="text-[10px] whitespace-nowrap">{tab}</span>
               </button>
             ))}
           </div>
@@ -320,12 +322,12 @@ export const TopNav: React.FC<TopNavProps> = ({
             {/* Manual Switch */}
             <button
               onClick={onToggleClaude}
-              className={`px-2 py-1 text-[11px] font-bold rounded transition-colors ${
+              className={`flex items-center gap-1 px-2 py-1 text-[11px] font-bold rounded transition-colors ${
                 claudeConnected ? 'text-emerald-400 hover:bg-emerald-950/30' : 'text-gray-400 hover:bg-gray-800'
               }`}
               title="Accendi o spegni manualmente il collegamento MCP con Claude"
             >
-              {claudeConnected ? 'DISCONNETTI' : 'COLLEGA'}
+              {claudeConnected?<Unplug aria-hidden="true" size={14}/>:<Plug aria-hidden="true" size={14}/>} {claudeConnected ? 'DISCONNETTI' : 'COLLEGA'}
             </button>
           </div>
 

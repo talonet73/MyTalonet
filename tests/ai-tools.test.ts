@@ -1,3 +1,4 @@
+import {automaticCuts} from '../src/services/smartCut';
 import {validateCaptionClip} from '../src/services/karaoke';
 import {test} from 'node:test';import assert from 'node:assert/strict';
 import {cleanupCandidates,rippleRemove,mergeRanges} from '../src/services/smartCut';
@@ -36,3 +37,5 @@ test('karaoke captions keep real word timing through chunking, cuts and clip spe
 test('quiet recognized words are protected from silence trimming and repeated takes stay unchecked',()=>{const subtitles:any=[{id:'a',startTime:1,endTime:3,text:'questa è una frase ripetuta',words:[{text:'voce',startTime:1,endTime:2}]},{id:'b',startTime:4,endTime:6,text:'questa è una frase ripetuta'}];const candidates=cleanupCandidates([{start:0,end:3}],subtitles,6,.5);assert.ok(candidates.filter(r=>r.reason==='pause').every(r=>r.end<1||r.start>2));assert.ok(candidates.some(r=>r.reason==='retake'&&!r.selected));});
 
 test('malformed caption word arrays and unknown styles are rejected before rendering or loading',()=>{for(const c of [{captionStyle:'other'},{captionWords:{}},{captionWords:[{text:'ciao',startTime:2,endTime:1}]}])assert.throws(()=>validateCaptionClip(c as any));validateCaptionClip({captionStyle:'karaoke',captionWords:[{text:'ciao',startTime:0,endTime:.4}]});});
+
+test('automatic pause cuts retain the chosen total margin across the full recording, including silence-only audio',()=>{for(const margin of [.5,1,2]){const ranges=automaticCuts([{start:0,end:3},{start:5,end:9}],10,margin);assert.equal(ranges.length,2);assert.ok(ranges.every(r=>r.selected));assert.equal(3-(ranges[0].end-ranges[0].start),margin);assert.equal(4-(ranges[1].end-ranges[1].start),margin);}assert.equal(automaticCuts([{start:1,end:2}],3,1).length,0);assert.equal(automaticCuts([{start:0,end:10}],10,1).length,1);assert.throws(()=>automaticCuts([],2,.1));});

@@ -165,7 +165,7 @@ Waveform Y, parade RGB, istogramma e vectorscope misurano il fotogramma scelto f
 
 ## Montaggio intelligente, sottotitoli dinamici e maschere
 
-**AI Cut** analizza il mix reale con Whisper e FFmpeg. Scegli lingua e soglia delle pause **0,5–2 s**, controlla gli intervalli, modifica i tempi se necessario e applica i tagli selezionati. Esitazioni e possibili ciak/ripetizioni richiedono revisione: il riconoscimento vocale può ometterli o interpretarli male. I tagli agiscono su tutte le piste mantenendo sincronismo e collegamenti; **Indietro** ripristina l’operazione. I file originali restano invariati.
+**AI Cut** esegue scansione e tagli con un solo pulsante: scegli la **pausa da conservare, 0,5–2 s**, e premi **Scansiona e taglia automaticamente**. Una pausa di 3 s con margine 1 s viene accorciata di 2 s. Non ci sono conferme successive. Il taglio delle pause funziona senza Whisper e analizza tutte le piste audio indipendentemente da Mute e volume di ascolto, anche oltre i dieci minuti del normale export. I tagli agiscono su tutte le piste mantenendo sincronismo e collegamenti; **Indietro** ripristina l’operazione. I file originali restano invariati. Puoi abilitare prima dell’avvio anche esitazioni e ciak/ripetizioni riconosciuti: usano Whisper, richiedono più tempo e possono essere interpretati male. Dettagli e verifiche: [docs/automatic-cut-verification.md](docs/automatic-cut-verification.md).
 
 In **Captions**, una nuova trascrizione include i tempi delle singole parole. **Parola evidenziata ottanio** genera frasi fino a cinque parole e sposta il fondo colorato sulla parola pronunciata, anche nell’esportazione. Una correzione che cambia il numero delle parole usa lo stile classico, evitando tempi inventati.
 

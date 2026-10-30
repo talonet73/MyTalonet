@@ -15,13 +15,7 @@ Le funzionalità nuove non richiedono abbonamenti, API commerciali, account o in
 
 ## Montaggio intelligente: AI Cut
 
-1. Premi **AI Cut**, scegli lingua e durata minima pausa fra **0,5 e 2 secondi**, quindi **Analizza video e audio**.
-2. L’app rende il mix montato reale, comprendendo offset, velocità, volume, mute/solo e mixer. FFmpeg rileva i silenzi sotto −40 dB; Whisper trascrive il parlato con tempi per parola.
-3. Le pause compatibili con la soglia lasciano **0,12 secondi** per lato. Le parole riconosciute, con un piccolo margine, sono protette dal taglio automatico delle pause. Con musica continua o rumore udibile una pausa nel parlato può non risultare silenziosa nel mix.
-4. Esitazioni riconosciute come “ehm”, “uhm”, “um”, “uh”, “eh” e possibili ciak/restart (“ciak”, “rifacciamo”, “stop”, “start again”…), oltre a frasi consecutive con inizio ripetuto, sono candidati **non preselezionati**. Puoi modificare inizio/fine, posizionare il cursore e usare Riproduci/Pausa per controllarli.
-5. **Applica tagli selezionati** rimuove solo gli intervalli scelti e chiude lo spazio su tutte le piste. I file sorgente restano invariati. Audio/video collegati conservano i collegamenti, e offset e velocità restano corretti. I marker seguono la nuova durata. Annulla ripristina clip, marker e bozze dei sottotitoli.
-
-Whisper può omettere un’esitazione o sbagliare le parole; un ciak errato dal punto di vista recitativo/visivo non è determinabile con certezza da questi strumenti. Gli indizi di ciak richiedono quindi revisione umana. Se non viene riconosciuto parlato, le proposte rimangono da selezionare; non si può eliminare tutto il montaggio. Cambiando il progetto, l’analisi precedente diventa inutilizzabile finché non viene ripetuta.
+Il flusso è stato aggiornato dopo la prima implementazione: scegli la **pausa totale da conservare, da 0,5 a 2 s**, e premi **Scansiona e taglia automaticamente**. Non ci sono liste da spuntare né una conferma successiva. La scansione delle pause è indipendente da Whisper, mute e volume di ascolto, e procede per blocchi fino alla fine del progetto. Le opzioni facoltative per esitazioni e ciak usano Whisper e applicano direttamente anche quei tagli se abilitate prima dell’avvio. I riconoscimenti possono essere errati; **Indietro** ripristina l’operazione. [Correzione del flusso, dettagli e verifiche aggiornate](automatic-cut-verification.md).
 
 ## Sottotitoli con evidenziazione ottanio
 
