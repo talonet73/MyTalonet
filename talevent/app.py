@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from core import Store, now_local, parse_local_date, ROME
+from text_capture import clean_selection, looks_sensitive, draft_title
 
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "TALEVENT"
 calendar.setfirstweekday(calendar.MONDAY)
@@ -36,6 +37,7 @@ class App:
         toolbar = ttk.Frame(self.body)
         toolbar.pack(fill="x", pady=8)
         ttk.Button(toolbar, text="Nuovo promemoria", command=self.new_event).pack(side="left", padx=3)
+        ttk.Button(toolbar, text="Acquisisci testo", command=self.capture_text).pack(side="left", padx=3)
         ttk.Button(toolbar, text="Modifica", command=self.edit_event).pack(side="left", padx=3)
         ttk.Button(toolbar, text="Elimina", command=self.delete_event).pack(side="left", padx=3)
         ttk.Button(toolbar, text="Esporta backup", command=self.export_backup).pack(side="right", padx=3)
@@ -83,7 +85,7 @@ class App:
                 ttk.Button(self.grid_frame, text=f"{day}\n{titles}", command=lambda d=day: self.new_event(d)).grid(
                     row=week_idx, column=col, padx=2, pady=2, sticky="nsew")
 
-    def event_dialog(self, event=None, day=None):
+    def event_dialog(self, event=None, day=None, prefill_title='', prefill_description=''):
         dlg = tk.Toplevel(self.root)
         dlg.title("Modifica promemoria" if event else "Nuovo promemoria")
         dlg.geometry("490x310")
@@ -97,11 +99,11 @@ class App:
         ttk.Label(frame, text="Titolo").pack(anchor="w")
         title = ttk.Entry(frame)
         title.pack(fill="x")
-        title.insert(0, event["title"] if event else "")
+        title.insert(0, event["title"] if event else prefill_title)
         ttk.Label(frame, text="Descrizione").pack(anchor="w", pady=(8,0))
         desc = ttk.Entry(frame)
         desc.pack(fill="x")
-        desc.insert(0, event["description"] if event else "")
+        desc.insert(0, event["description"] if event else prefill_description)
         ttk.Label(frame, text="Data e ora (AAAA-MM-GG HH:MM)").pack(anchor="w", pady=(8,0))
         due = ttk.Entry(frame)
         due.pack(fill="x")
@@ -118,6 +120,28 @@ class App:
             except Exception as exc:
                 messagebox.showerror("Controlla i dati", str(exc), parent=dlg)
         ttk.Button(frame, text="Salva promemoria", command=save).pack(anchor="e", pady=16)
+
+    def capture_text(self):
+        """L'utente incolla esplicitamente il testo da acquisire."""
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Revisione testo")
+        dlg.geometry("600x380")
+        dlg.transient(self.root)
+        dlg.grab_set()
+        ttk.Label(dlg, text="Incolla il testo che vuoi acquisire.").pack(padx=12, pady=8)
+        editor = tk.Text(dlg, wrap="word", height=11)
+        editor.pack(fill="both", expand=True, padx=12)
+        def approve():
+            try:
+                content = clean_selection(editor.get("1.0", "end-1c"))
+                if looks_sensitive(content):
+                    messagebox.showwarning("Dati sensibili", "Rimuovi possibili credenziali.", parent=dlg)
+                    return
+                dlg.destroy()
+                self.event_dialog(prefill_title=draft_title(content), prefill_description=content)
+            except ValueError as exc:
+                messagebox.showerror("Controlla testo", str(exc), parent=dlg)
+        ttk.Button(dlg, text="Approva testo", command=approve).pack(pady=10)
 
     def new_event(self, day=None):
         self.event_dialog(day=day)
