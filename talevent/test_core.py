@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 from core import Store, parse_local_date
 
 TZ = ZoneInfo("Europe/Rome")
-NOW = datetime(2026, 11, 2, 12, 0, tzinfo=TZ)
+NOW = (datetime.now(TZ) + timedelta(days=10)).replace(hour=12, minute=0, second=0, microsecond=0)
 
 class CoreTests(unittest.TestCase):
     def setUp(self):
@@ -48,3 +48,4 @@ class CoreTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

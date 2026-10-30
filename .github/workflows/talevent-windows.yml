@@ -10,6 +10,24 @@ concurrency:
   group: talevent-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  windows11-core:
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          architecture: arm64
+      - name: Require Windows 11 and run portable tests natively
+        shell: pwsh
+        run: |
+          $os = Get-CimInstance Win32_OperatingSystem
+          if ($os.Caption -notmatch 'Windows 11') { throw 'Windows 11 required' }
+          $os | Select-Object Caption, Version, BuildNumber | Format-List
+          python -m pip install tzdata==2025.2
+          if ($LASTEXITCODE -ne 0) { throw 'Timezone dependency install failed' }
+          python -m unittest discover -s talevent -p "test_*.py" -v
+          if ($LASTEXITCODE -ne 0) { throw 'Windows 11 unit tests failed' }
   build:
     runs-on: windows-2025
     steps:
@@ -103,7 +121,7 @@ jobs:
             windows11-smoke*
             install.log
   release:
-    needs: [build, windows11]
+    needs: [build, windows11-core, windows11]
     runs-on: ubuntu-latest
     permissions:
       contents: write
