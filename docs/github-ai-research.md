@@ -15,7 +15,7 @@ Le funzionalità nuove non richiedono abbonamenti, API commerciali, account o in
 
 ## Montaggio intelligente: AI Cut
 
-Il flusso è stato aggiornato dopo la prima implementazione: scegli la **pausa totale da conservare, da 0,5 a 2 s**, e premi **Scansiona e taglia automaticamente**. Non ci sono liste da spuntare né una conferma successiva. La scansione delle pause è indipendente da Whisper, mute e volume di ascolto, e procede per blocchi fino alla fine del progetto. Le opzioni facoltative per esitazioni e ciak usano Whisper e applicano direttamente anche quei tagli se abilitate prima dell’avvio. I riconoscimenti possono essere errati; **Indietro** ripristina l’operazione. [Correzione del flusso, dettagli e verifiche aggiornate](automatic-cut-verification.md).
+Il flusso è stato aggiornato dopo la prima implementazione: scegli la **pausa totale da conservare, da 0,2 a 1 s**, e premi **Scansiona e taglia automaticamente**. Non ci sono liste da spuntare né una conferma successiva. La scansione delle pause è indipendente da Whisper, mute e volume di ascolto, e procede per blocchi fino alla fine del progetto. Le opzioni facoltative per esitazioni e ciak usano Whisper e applicano direttamente anche quei tagli se abilitate prima dell’avvio. I riconoscimenti possono essere errati; **Indietro** ripristina l’operazione. [Correzione del flusso, dettagli e verifiche aggiornate](automatic-cut-verification.md).
 
 ## Sottotitoli con evidenziazione ottanio
 

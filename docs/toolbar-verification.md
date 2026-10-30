@@ -50,7 +50,7 @@ La regressione conserva le prove precedenti di container MP4/MOV/AVI/MP3/WAV, to
 ## Esiti e limiti
 
 - `npm run lint`: **PASS**, verifica TypeScript.
-- `npm test`: **PASS, 101/101**, test reali/di integrazione sui contenuti e sulle operazioni.
+- `npm test`: **PASS, 102/102**, test reali/di integrazione sui contenuti e sulle operazioni.
 - `npm run test:whisper`: **PASS**, parlato noto e silenzio reali.
 - `npm run test:e2e`: **PASS, 32/32** scenari Chromium, con numerose azioni e verifiche per ciascuno; il numero di scenari non è il numero di pulsanti.
 - Build di produzione eseguita dal runner browser e `git diff --check`: **PASS**.

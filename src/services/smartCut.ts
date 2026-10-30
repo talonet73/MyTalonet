@@ -19,7 +19,7 @@ export function cleanupCandidates(silences:{start:number;end:number}[],subtitles
 }
 /** Automatic mode shortens each complete pause to the requested total retained margin. */
 export function automaticCuts(silences:{start:number;end:number}[],duration:number,margin:number){
-  if(!Number.isFinite(margin)||margin<.5||margin>2)throw new Error('Margine pause da 0,5 a 2 secondi.');
+  if(!Number.isFinite(margin)||margin<.2||margin>1)throw new Error('Margine pause da 0,2 a 1 secondo.');
   return mergeRanges(silences,duration).filter(r=>r.end-r.start>margin+.04).map(r=>({id:crypto.randomUUID(),start:r.start+margin/2,end:r.end-margin/2,reason:'pause' as const,label:'Pausa accorciata automaticamente',selected:true}));
 }
 export function rippleRemove(clips:TimelineClip[],ranges:{start:number;end:number}[]){

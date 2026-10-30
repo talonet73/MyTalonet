@@ -5,7 +5,7 @@ import type {TimelineClip,Track} from '../types/editor';
 import type {AudioSettings} from '../services/audioMixer';
 import type {CutRange} from '../services/smartCut';
 export function SmartCutPanel({clips,tracks,master,language,onClose,onApply}:{clips:TimelineClip[];tracks:Track[];master:AudioSettings;language:string;onClose:()=>void;onApply:(ranges:CutRange[],warning?:string)=>void}){
-  const [margin,setMargin]=useState(1),[fillers,setFillers]=useState(false),[retakes,setRetakes]=useState(false),[analysisLanguage,setAnalysisLanguage]=useState(language);
+  const [margin,setMargin]=useState(.3),[fillers,setFillers]=useState(false),[retakes,setRetakes]=useState(false),[analysisLanguage,setAnalysisLanguage]=useState(language);
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[status,setStatus]=useState('');
   const version=JSON.stringify([clips,tracks,master]),currentVersion=useRef(version),alive=useRef(true),running=useRef(false);currentVersion.current=version;
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
@@ -30,7 +30,7 @@ export function SmartCutPanel({clips,tracks,master,language,onClose,onApply}:{cl
   return <div className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center"><DraggableWindow as="section" role="dialog" aria-label="Montaggio intelligente" className="smart-cut-panel">
     <header data-window-handle><strong className="flex items-center gap-2"><Scissors size={18}/> AI Cut · taglio automatico</strong><button aria-label="Chiudi montaggio intelligente" onClick={onClose} disabled={busy}><X size={16}/></button></header>
     <div className="p-4 space-y-4">
-      <label className="block">Pausa da conservare: <output>{margin.toFixed(1)} secondi</output><input aria-label="Margine pause" type="range" min="0.5" max="2" step="0.1" value={margin} disabled={busy} onChange={e=>setMargin(Number(e.target.value))}/></label>
+      <label className="block">Pausa da conservare: <output>{margin.toFixed(1)} secondi</output><input aria-label="Margine pause" type="range" min="0.2" max="1" step="0.1" value={margin} disabled={busy} onChange={e=>setMargin(Number(e.target.value))}/></label>
       <p>Ogni pausa più lunga viene accorciata al valore scelto, distribuendo il margine ai due lati. Viene analizzato tutto l’audio delle piste, anche quelle in Mute, senza dipendere dal volume di ascolto.</p>
       <label className="block"><input type="checkbox" aria-label="Elimina esitazioni" checked={fillers} disabled={busy} onChange={e=>setFillers(e.target.checked)}/> Elimina anche ehm/uhm riconosciuti</label>
       <label className="block"><input type="checkbox" aria-label="Elimina ciak e ripetizioni" checked={retakes} disabled={busy} onChange={e=>setRetakes(e.target.checked)}/> Elimina anche ciak e ripetizioni riconosciuti</label>

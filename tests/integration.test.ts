@@ -401,7 +401,7 @@ test('long karaoke timelines export through a filter script with source audio in
 test('automatic AI Cut scans every audio track without Whisper or review, preserves the chosen margin and ignores monitor mute',async()=>{
   const speech=await upload(path.resolve('tests/fixtures/jfk.wav'));const oldPython=process.env.WHISPER_PYTHON;process.env.WHISPER_PYTHON=path.join(temp,'missing-python');
   try{
-    for(const margin of [.5,2]){
+    for(const margin of [.2,1]){
       const res=await api('/api/smart-cut',{mode:'automatic',margin,clips:[clip(speech,{type:'audio',id:'voice',trackId:'muted',startTime:2,duration:4,volumeDb:-60})],tracks:[{id:'muted',type:'audio',name:'AUDIO',isMuted:true,isSolo:false,audio:{volume:-60}}],audioMaster:{mute:true},durationSec:9});assert.equal(res.status,202,JSON.stringify(res.data));let job:any;
       for(let i=0;i<100;i++){job=(await api(`/api/captions/${res.data.jobId}`)).data;if(job.status!=='running')break;await new Promise(r=>setTimeout(r,50));}
       assert.equal(job.status,'complete',JSON.stringify(job));assert.ok(job.candidates.length>=1);assert.ok(job.candidates.every((r:any)=>r.selected));const tail=job.candidates.find((r:any)=>r.end>7);assert.ok(tail,JSON.stringify(job));assert.ok(Math.abs((9-6)-(tail.end-tail.start)-margin)<.1);
@@ -420,3 +420,5 @@ test('automatic scan reaches audio beyond ten minutes without truncating at the 
     assert.equal(job.status,'complete',JSON.stringify(job));const leading=job.candidates.find((r:any)=>r.start<1);assert.ok(leading&&leading.end>(duration===604?600:599),JSON.stringify(job));assert.ok(job.candidates.every((r:any)=>r.end<=duration));
   }
 });
+
+test('automatic AI Cut detects a real sub-quarter-second pause and retains exactly 0.2 seconds',async()=>{const file=path.join(temp,'short-pause.wav');await ff(['-f','lavfi','-i','aevalsrc=if(between(t\\,0.3\\,0.58)\\,0\\,0.1*sin(2*PI*440*t)):s=48000:d=0.9',file]);const asset=await upload(file);for(const margin of [.2,.3]){const res=await api('/api/smart-cut',{mode:'automatic',margin,clips:[clip(asset,{type:'audio',duration:.9})],durationSec:.9});assert.equal(res.status,202);let job:any;for(let i=0;i<100;i++){job=(await api(`/api/captions/${res.data.jobId}`)).data;if(job.status!=='running')break;await new Promise(r=>setTimeout(r,50));}assert.equal(job.status,'complete',JSON.stringify(job));if(margin===.2){assert.equal(job.candidates.length,1);assert.ok(Math.abs(job.candidates[0].start-.4)<.005);assert.ok(Math.abs(job.candidates[0].end-.48)<.005);}else assert.equal(job.candidates.length,0);}});
