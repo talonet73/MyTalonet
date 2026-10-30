@@ -278,7 +278,7 @@ class App:
             return
         try:
             for event in self.store.pending_alerts():
-                key = (event["id"], event["minutes_before"])
+                key = (event["id"], event["minutes_before"], event["due"].isoformat())
                 if key in self.alerts_inflight:
                     continue
                 self.alerts_inflight.add(key)

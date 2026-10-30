@@ -37,3 +37,10 @@ class DeliveryTests(unittest.TestCase):
         self.store.add("Ora legale", due.astimezone(ROME), current=current)
         self.assertEqual(self.store.pending_alerts(current), [])
         self.assertEqual([e["minutes_before"] for e in self.store.pending_alerts(current + timedelta(minutes=30))], [60])
+
+    def test_old_delivery_does_not_ack_edited_event(self):
+        due = self.now + timedelta(minutes=20)
+        ident = self.store.add("Test", due, current=self.now)
+        self.store.update(ident, "Spostato", self.now + timedelta(minutes=25), current=self.now)
+        self.store.mark_delivered(ident, 30, due.isoformat())
+        self.assertEqual(len(self.store.pending_alerts(self.now)), 1)

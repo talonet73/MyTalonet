@@ -16,6 +16,7 @@ def notify(title, body):
     xml = '<toast><visual><binding template="ToastGeneric"><text>' + escape(title) + '</text><text>' + escape(body) + '</text></binding></visual><audio src="ms-winsoundevent:Notification.Reminder"/></toast>'
     # XML travels through stdin, never through shell interpolation.
     script = """$ErrorActionPreference='Stop'
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new()
 [Windows.UI.Notifications.ToastNotificationManager,Windows.UI.Notifications,ContentType=WindowsRuntime] > $null
 [Windows.Data.Xml.Dom.XmlDocument,Windows.Data.Xml.Dom.XmlDocument,ContentType=WindowsRuntime] > $null
 $doc = New-Object Windows.Data.Xml.Dom.XmlDocument

@@ -156,9 +156,14 @@ class Store:
                 result.append(self._decode(row))
         return result
 
-    def mark_delivered(self, event_id: str, minutes_before: int):
+    def mark_delivered(self, event_id: str, minutes_before: int, expected_due: str | None = None):
         with self.db:
-            self.db.execute("UPDATE notifications SET delivered=1 WHERE reminder_id=? AND minutes_before>=?", (event_id, minutes_before))
+            if expected_due is None:
+                self.db.execute("UPDATE notifications SET delivered=1 WHERE reminder_id=? AND minutes_before>=?", (event_id, minutes_before))
+            else:
+                self.db.execute("""UPDATE notifications SET delivered=1 WHERE reminder_id=? AND minutes_before>=?
+                    AND reminder_id IN (SELECT id FROM reminders WHERE due_utc=?)""",
+                    (event_id, minutes_before, self._utc(datetime.fromisoformat(expected_due))))
 
     def export_backup(self, destination: str | Path, current: datetime | None = None):
         events = self.list(current)
