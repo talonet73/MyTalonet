@@ -18,12 +18,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install timezone data
+        run: python -m pip install tzdata==2025.2
       - name: Test motore
         run: python -m unittest discover -s talevent -p "test_*.py" -v
       - name: Install packaging dependencies
         run: pip install -r talevent/requirements-build.txt
       - name: Create standalone development executable
-        run: pyinstaller --noconfirm --clean --onefile --windowed --name TALEVENT --paths talevent talevent/app.py
+        run: pyinstaller --noconfirm --clean --onefile --windowed --collect-all tzdata --name TALEVENT --paths talevent talevent/app.py
       - name: Upload development artifact
         uses: actions/upload-artifact@v4
         with:
