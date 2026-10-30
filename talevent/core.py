@@ -120,7 +120,7 @@ class Store:
             rows = self.db.execute("""
                 SELECT r.*, n.minutes_before FROM reminders r
                 JOIN notifications n ON n.reminder_id=r.id
-                WHERE n.delivered=0 AND r.due_utc>? ORDER BY r.due_utc
+                WHERE n.delivered=0 AND r.due_utc>? ORDER BY r.due_utc, n.minutes_before DESC
             """, (now,)).fetchall()
             for r in rows:
                 due = datetime.fromisoformat(r["due_utc"])
