@@ -1,0 +1,143 @@
+name: TALEVENT Windows build and verification
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/talevent-windows]
+    paths: ['talevent/**', '.github/workflows/talevent-windows.yml']
+permissions:
+  contents: read
+concurrency:
+  group: talevent-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows11-core:
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          architecture: arm64
+      - name: Require Windows 11 and run portable tests natively
+        shell: pwsh
+        run: |
+          $os = Get-CimInstance Win32_OperatingSystem
+          if ($os.Caption -notmatch 'Windows 11') { throw 'Windows 11 required' }
+          $os | Select-Object Caption, Version, BuildNumber | Format-List
+          python -m pip install tzdata==2025.2
+          if ($LASTEXITCODE -ne 0) { throw 'Timezone dependency install failed' }
+          python -m unittest discover -s talevent -p "test_*.py" -v
+          if ($LASTEXITCODE -ne 0) { throw 'Windows 11 unit tests failed' }
+  build:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - name: Install dependencies
+        run: python -m pip install -r talevent/requirements-build.txt
+      - name: Unit tests
+        run: python -m unittest discover -s talevent -p "test_*.py" -v
+      - name: Bundle multilingual offline model and provenance
+        run: python talevent/prepare_model.py
+      - name: Package executable with audio runtime and offline model
+        run: >-
+          pyinstaller --noconfirm --clean --onedir --windowed --name TALEVENT
+          --paths talevent --collect-all tzdata --collect-all pystray
+          --collect-all sounddevice --collect-all _sounddevice_data
+          --collect-all faster_whisper --collect-all ctranslate2 --collect-all av
+          --add-data "talevent/models;models" talevent/app.py
+      - name: Exercise frozen Windows application
+        shell: pwsh
+        run: ./talevent/windows-smoke.ps1 -Executable "$PWD/dist/TALEVENT/TALEVENT.exe" -ReportPrefix build-smoke
+      - name: Compile per-user offline installer
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles(x86)}/Inno Setup 6/ISCC.exe" talevent/installer.iss
+          if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed" }
+          Get-FileHash dist/TALEVENT-Setup.exe -Algorithm SHA256 | Format-List | Out-File dist/SHA256.txt
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: TALEVENT-installer
+          path: |
+            dist/TALEVENT-Setup.exe
+            dist/SHA256.txt
+            talevent/models/tiny/provenance.json
+          if-no-files-found: error
+      - name: Upload build verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TALEVENT-build-evidence
+          path: |
+            build-smoke*
+            build/TALEVENT/warn-TALEVENT.txt
+  windows11:
+    needs: build
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: TALEVENT-installer
+          path: package
+      - name: Require genuine Windows 11 client
+        shell: pwsh
+        run: |
+          $os = Get-CimInstance Win32_OperatingSystem
+          $os | Select-Object Caption, Version, BuildNumber | Format-List
+          if ($os.Caption -notmatch 'Windows 11') { throw 'This job requires Windows 11' }
+      - name: Install without Python or network downloads
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem package -Recurse -Filter TALEVENT-Setup.exe).FullName
+          $install = Join-Path $env:RUNNER_TEMP 'TALEVENT installed'
+          $args = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', ('/DIR="' + $install + '"'), '/LOG=install.log')
+          $p = Start-Process $setup -ArgumentList $args -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Install failed: $($p.ExitCode)" }
+          "TALEVENT_INSTALL=$install" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Test installed application on Windows 11
+        shell: pwsh
+        run: ./talevent/windows-smoke.ps1 -Executable "$env:TALEVENT_INSTALL/TALEVENT.exe" -ReportPrefix windows11-smoke
+      - name: Uninstall and preserve user data
+        shell: pwsh
+        run: |
+          $data = Join-Path $env:LOCALAPPDATA 'TALEVENT'
+          New-Item -ItemType Directory -Path $data -Force | Out-Null
+          Set-Content (Join-Path $data 'preserve-check.txt') 'user data'
+          $p = Start-Process "$env:TALEVENT_INSTALL/unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Uninstall failed: $($p.ExitCode)" }
+          if (Test-Path "$env:TALEVENT_INSTALL/TALEVENT.exe") { throw 'Executable still installed' }
+          if (-not (Test-Path "$data/preserve-check.txt")) { throw 'User data removed' }
+      - name: Upload Windows 11 verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TALEVENT-Windows11-evidence
+          path: |
+            windows11-smoke*
+            install.log
+  release:
+    needs: [build, windows11-core, windows11]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: TALEVENT-installer
+          path: package
+      - name: Publish verified preview installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMMIT: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+        shell: bash
+        run: |
+          setup=$(find package -name TALEVENT-Setup.exe -print -quit)
+          checksum=$(find package -name SHA256.txt -print -quit)
+          gh release create "talevent-preview-$RUN_ID" "$setup" "$checksum" --target "$COMMIT" --prerelease --title "TALEVENT Windows preview $RUN_ID" --notes "Installer offline. Verifiche automatiche: build Windows x64, installazione e avvio su Windows 11 ARM con emulazione x64, GUI, appunti, tray, API notifiche e trascrizione offline. Microfono fisico e visibilità effettiva dei toast non verificati sui runner. Pacchetto non firmato. Evidenze nei workflow artifact."

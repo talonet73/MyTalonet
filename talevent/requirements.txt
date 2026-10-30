@@ -1,0 +1,7 @@
+tzdata==2025.2
+pystray==0.19.5
+Pillow==11.3.0
+sounddevice==0.5.2
+faster-whisper==1.2.1
+# PyAV 19 removed metadata_errors, still used by faster-whisper 1.2.1.
+av==16.1.0
