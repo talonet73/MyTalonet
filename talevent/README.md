@@ -1,33 +1,25 @@
-# TALEVENT — sviluppo Windows 11
+# TALEVENT — anteprima Windows
 
-Applicazione personale per promemoria, completamente locale. Questo branch contiene la **prima implementazione parziale**, non il prodotto completo.
+Sviluppo isolato nel branch `codex/talevent-windows`: TALEDIT e main non sono modificati.
 
-## Funzionalità implementate nel codice
-- SQLite locale e transazioni
-- Calendario mensile, creazione, modifica ed eliminazione
-- Tre scadenze (60, 30, 5 minuti) tramite motore di scheduling in processo
-- Eliminazione degli eventi scaduti, inclusa pulizia all'avvio
-- Backup manuale JSON e ripristino senza duplicati
-- Gestione orario italiano e cambio ora legale (rifiuta orari ambigui)
-- GUI italiana basata su tkinter
-- Test unitari del motore e GitHub Actions di compilazione Windows
+## Implementazione
+- Calendario, CRUD, SQLite locale, backup JSON e orari Europe/Rome.
+- Acquisizione testo tramite incolla o Ctrl+Alt+T dopo aver copiato il testo. Revisione prima di creare un promemoria.
+- Registrazione esplicita da microfono selezionabile (massimo 5 minuti), stop/annulla e importazione WAV/MP3/M4A/FLAC/OGG.
+- Trascrizione CPU int8 con Whisper tiny multilingue incluso. Nessun download durante l'uso. Controllare il risultato; data e ora si impostano nella scheda evento.
+- Tray: chiudere la finestra la nasconde e mantiene lo scheduler attivo. Esci termina gli avvisi. Avvio all'accesso opzionale nell'installer.
+- Toast nativi asincroni con ritentativo in caso di errore API. Dopo sospensione gli avvisi superati vengono accorpati. Windows può sopprimerli con Non disturbare.
+- Installer per utente `TALEVENT-Setup.exe`, disinstallazione che conserva i dati locali.
 
-## Mancanze importanti
-- La GUI mostra finestre tkinter, **non ancora toast nativi Windows**.
-- Nessuna icona nella tray, scorciatoia globale, acquisizione testo o audio, microfono o Whisper.
-- Nessuna installazione completa offline con modello AI.
-- La finestra deve restare aperta per gli avvisi; se esci non ricevi notifiche.
-- Le notifiche in questo branch sono ancora un'implementazione preliminare.
-- La firma dell'eseguibile non è configurata.
-- I test in GitHub Actions non sostituiscono una prova reale dell'interfaccia sul PC.
+## Verifica
+Il codice non certifica il funzionamento sul dispositivo. Il workflow produce report JSON e screenshot: `build` prova il pacchetto x64 su Windows Server 2025; `windows11` richiede Windows 11 ARM e prova il programma x64 installato tramite emulazione. La release viene pubblicata soltanto dopo il successo di entrambi.
 
-## Avvio sviluppo
-Su Windows con Python 3.12 installato: `py -3.12 talevent/app.py`.
-Test: `py -3.12 -m unittest discover -s talevent -p "test_*.py"`.
+La trascrizione viene verificata con parlato SAPI e modello locale. I runner non verificano microfono fisico, qualità su parlato italiano reale o visibilità effettiva dei toast. Il report distingue tali limiti dai controlli superati. Non è una certificazione Windows 11 x64 su hardware fisico. Firma digitale non configurata.
 
-## Build di prova
-Il workflow `.github/workflows/talevent-windows.yml` genera un **ZIP con TALEVENT.exe di prova** mediante PyInstaller. Non è ancora `TALEVENT-Setup.exe` e non va presentato come prodotto finito.
+## Sviluppo
+Windows, Python 3.12 x64: `python -m pip install -r talevent/requirements-build.txt`, `python talevent/prepare_model.py`, `python talevent/app.py`.
+Test: `python -m unittest discover -s talevent -p "test_*.py" -v`.
+Il workflow acquisisce il modello con revisione risolta e SHA256 nel file provenance.json, compila con PyInstaller e Inno Setup, installa, verifica e disinstalla.
 
-## Privacy
-Tutti gli eventi restano sul computer. I backup JSON non sono cifrati.
-Il codice TALEVENT vive solo nella cartella `/talevent/`. Il workflow separato non modifica quello del video editor.
+## Dati
+Dati in `%LOCALAPPDATA%\TALEVENT`, log `talevent.log`. Eventi e backup non cifrati. L'audio registrato usa un file temporaneo eliminato dopo trascrizione o annullamento; un arresto forzato può lasciarlo nella cartella temporanea. I file importati restano intatti. Nessun ascolto automatico o acquisizione in background. Gli avvisi richiedono TALEVENT in esecuzione e una sessione utente attiva; non risveglia il PC spento.
