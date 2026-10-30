@@ -134,6 +134,32 @@ class Store:
             self.db.execute("DELETE FROM reminders WHERE due_utc <= ?", (now,))
         return claimed
 
+    def pending_alerts(self, current: datetime | None = None) -> list[dict]:
+        """Latest elapsed threshold per event; retry until Windows accepts it.
+
+        After sleep, avoid three simultaneous notifications for the same event.
+        Compare instants in UTC, including across a daylight-saving change.
+        """
+        current = current or now_local()
+        rows = self.db.execute("""
+            SELECT r.*, n.minutes_before FROM reminders r
+            JOIN notifications n ON n.reminder_id=r.id
+            WHERE n.delivered=0 AND r.due_utc>?
+            ORDER BY r.due_utc, n.minutes_before ASC
+        """, (self._utc(current),)).fetchall()
+        seen = set()
+        result = []
+        for row in rows:
+            due = datetime.fromisoformat(row["due_utc"])
+            if row["id"] not in seen and due - timedelta(minutes=row["minutes_before"]) <= current.astimezone(timezone.utc):
+                seen.add(row["id"])
+                result.append(self._decode(row))
+        return result
+
+    def mark_delivered(self, event_id: str, minutes_before: int):
+        with self.db:
+            self.db.execute("UPDATE notifications SET delivered=1 WHERE reminder_id=? AND minutes_before>=?", (event_id, minutes_before))
+
     def export_backup(self, destination: str | Path, current: datetime | None = None):
         events = self.list(current)
         payload = {"format": "talevent-backup-v1", "events": [
@@ -163,3 +189,4 @@ class Store:
                     count += 1
                     self.db.executemany("INSERT INTO notifications VALUES(?,?,0)", [(event[0], m) for m in OFFSETS])
         return count, len(data["events"]) - count
+
