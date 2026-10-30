@@ -1,3 +1,5 @@
+import {AudioMixer} from './components/AudioMixer';
+import {validateAudio,type AudioSettings} from './services/audioMixer';
 import {changeClipSpeed,clipRate,validSpeedLevel} from './services/clipSpeed';
 import {duplicateTrack} from './services/duplicateTrack';
 import {downloadScreenshot} from './services/screenshotDownload';
@@ -88,6 +90,9 @@ const INITIAL_CLIPS: TimelineClip[] = [];
 const INITIAL_SUBTITLES: SubtitleItem[] = [];
 
 export default function App() {
+  const [workspace,setWorkspace]=useState<'video'|'audio'>('video');
+  const [audioMaster,setAudioMaster]=useState<AudioSettings>({});
+  const audioMasterRef=useRef(audioMaster);audioMasterRef.current=audioMaster;
   // Timeline State
   const [tracks, setTracks] = useState<Track[]>(INITIAL_TRACKS);
   const [clips, setClips] = useState<TimelineClip[]>(INITIAL_CLIPS);
@@ -155,7 +160,7 @@ export default function App() {
 
   const tracksRef = useRef<Track[]>(tracks);
   useEffect(() => { tracksRef.current=tracks; },[tracks]);
-  const historyRef = useRef<{clips:TimelineClip[];tracks:Track[]}[]>([{clips:INITIAL_CLIPS,tracks:INITIAL_TRACKS}]);
+  const historyRef = useRef<{clips:TimelineClip[];tracks:Track[];audioMaster?:AudioSettings}[]>([{clips:INITIAL_CLIPS,tracks:INITIAL_TRACKS}]);
   const historyIndexRef = useRef<number>(0);
   const [historyCount, setHistoryCount] = useState<number>(0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -171,8 +176,8 @@ export default function App() {
   ]);
 
   // Push new move to history (maintains up to 10 moves)
-  const pushHistory = useCallback((newClips: TimelineClip[], newTracks=tracksRef.current) => {
-    const snapshot={clips:newClips,tracks:newTracks};
+  const pushHistory = useCallback((newClips: TimelineClip[], newTracks=tracksRef.current,newMaster=audioMasterRef.current) => {
+    const snapshot={clips:newClips,tracks:newTracks,audioMaster:newMaster};
     const currentIdx = historyIndexRef.current;
     const sliced = historyRef.current.slice(0, currentIdx + 1);
 
@@ -194,10 +199,11 @@ export default function App() {
     setHistoryCount(newIdx);
   }, []);
 
-  const sharedState = { clips, tracks, subtitles, mediaAssets, currentTime, selectedClipId, aspectRatio };
+  const sharedState = { audioMaster, clips, tracks, subtitles, mediaAssets, currentTime, selectedClipId, aspectRatio };
   useEditorSync(sharedState, remote => {
     const normalized=normalizeTrackAssignments(remote.clips,remote.tracks);remote={...remote,...normalized};
-    setClips(remote.clips); clipsRef.current = remote.clips; pushHistory(remote.clips,remote.tracks);
+    setClips(remote.clips); clipsRef.current = remote.clips; pushHistory(remote.clips,remote.tracks,remote.audioMaster||{});
+    setAudioMaster(remote.audioMaster||{});
     setTracks(remote.tracks); setSubtitles(remote.subtitles); setMediaAssets(remote.mediaAssets);
     setCurrentTime(remote.currentTime); setSelectedClipId(remote.selectedClipId);
     setSelectedClipIds(remote.selectedClipId ? [remote.selectedClipId] : []);
@@ -214,7 +220,7 @@ export default function App() {
       const snapshot = historyRef.current[prevIdx];
       const targetClips = snapshot?.clips;
       if (targetClips) {
-        setTracks(snapshot.tracks);tracksRef.current=snapshot.tracks;
+        setTracks(snapshot.tracks);tracksRef.current=snapshot.tracks;setAudioMaster(snapshot.audioMaster||{});
         setSelectedClipId(id=>targetClips.some(c=>c.id===id)?id:null);
         setSelectedClipIds(ids=>ids.filter(id=>targetClips.some(c=>c.id===id)));
         setClips(targetClips);
@@ -237,7 +243,7 @@ export default function App() {
       const snapshot = historyRef.current[nextIdx];
       const targetClips = snapshot?.clips;
       if (targetClips) {
-        setTracks(snapshot.tracks);tracksRef.current=snapshot.tracks;
+        setTracks(snapshot.tracks);tracksRef.current=snapshot.tracks;setAudioMaster(snapshot.audioMaster||{});
         setSelectedClipId(id=>targetClips.some(c=>c.id===id)?id:null);
         setSelectedClipIds(ids=>ids.filter(id=>targetClips.some(c=>c.id===id)));
         setClips(targetClips);
@@ -343,7 +349,7 @@ export default function App() {
       appName: 'TALEDIT',
       version: '2.1.0',captionWorkflow:'timeline',
       savedAt: new Date().toISOString(),
-      tracks,
+      tracks,audioMaster,
       clips,
       markers,
       subtitles,
@@ -374,6 +380,8 @@ export default function App() {
         const content = evt.target?.result as string;
         const data = JSON.parse(content);
         if (data.appName !== 'TALEDIT' || !Array.isArray(data.tracks) || !Array.isArray(data.clips) || data.clips.some((c: any) => !c.id || !['video','audio','image','effect','text'].includes(c.type) || !Number.isFinite(c.startTime) || c.startTime < 0 || !Number.isFinite(c.duration) || c.duration <= 0 || !validSpeedLevel(c.speedLevel))) throw new Error('Progetto TALEDIT non valido.');
+        validateAudio(data.audioMaster);for(const t of data.tracks)validateAudio(t.audio);
+        setAudioMaster(data.audioMaster||{});
         let normalized=normalizeTrackAssignments(data.clips,data.tracks);
         if(!normalized.tracks.some(t=>t.type==='text'))normalized.tracks.push(textTrack());
         if(data.captionWorkflow!=='timeline' && !data.clips.some((c:TimelineClip)=>c.type==='text') && data.subtitles?.length)normalized=captionClips(data.subtitles,normalized.clips,normalized.tracks,false,data.bilingualCaptions);
@@ -381,7 +389,7 @@ export default function App() {
         if (data.tracks) setTracks(data.tracks);
         if (data.clips) {
           setClips(data.clips);
-          pushHistory(data.clips,data.tracks || tracksRef.current);
+          pushHistory(data.clips,data.tracks || tracksRef.current,data.audioMaster||{});
         }
         if (data.markers) setMarkers(data.markers);
         if (data.subtitles) setSubtitles(data.subtitles);
@@ -848,7 +856,7 @@ export default function App() {
   const handleGenerateCaptions = async () => {
     try {
       const durationSec = Math.max(0, ...clips.map(c => c.startTime + c.duration));
-      const response = await fetch('/api/captions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clips, tracks, durationSec, language: spokenLanguage, bilingual: bilingualCaptions }) });
+      const response = await fetch('/api/captions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clips, tracks, durationSec, audioMaster, language: spokenLanguage, bilingual: bilingualCaptions }) });
       const data = await response.json(); if (!response.ok) throw new Error(data.error);
       for (;;) {
         const statusResponse = await fetch(`/api/captions/${data.jobId}`);
@@ -950,7 +958,7 @@ export default function App() {
       </EditingToolsPanel>}
 
       {/* 2. Main Middle Workspace: Header + 4 Resizable Panels */}
-      <div className="flex-1 flex flex-col min-h-0 bg-[#0e121d]">
+      <div style={{display:workspace==='video'?'flex':'none'}} className="flex-1 flex flex-col min-h-0 bg-[#0e121d]">
         {/* Subheader matching screenshot: "PREVIEW / Importa un file multimediale per iniziare" */}
         <div className="px-4 py-1.5 border-b border-[#1b2436] bg-[#0c101a] flex items-center justify-between">
           <div className="flex items-baseline gap-3">
@@ -970,7 +978,7 @@ export default function App() {
         </div>
 
         {/* 4 Panels Grid with draggable borders (User request #1) */}
-        <div className="flex-1 flex min-h-0 overflow-hidden">
+        <div style={{display:workspace==='video'?'flex':'none'}} className="flex-1 flex min-h-0 overflow-hidden">
           {/* Panel 1: Media Library */}
           <div style={{ width: `${mediaWidth}px` }} className="h-full shrink-0">
             <MediaLibraryPanel
@@ -1006,6 +1014,7 @@ export default function App() {
               onSeek={t => setCurrentTime(t)}
               aspectRatio={aspectRatio}
               setAspectRatio={setAspectRatio}
+              tracks={tracks} audioMaster={audioMaster}
               clips={activeTimelineClips(clips, tracks)}
               subtitles={timelineSubtitles(activeTimelineClips(clips,tracks))}
               isMuted={isMutedMaster}
@@ -1036,6 +1045,14 @@ export default function App() {
         </div>
       </div>
 
+      {workspace==='audio' && <div className="flex flex-1 min-h-0">
+        <div style={{width:mediaWidth}} className="shrink-0 min-h-0"><MediaLibraryPanel assets={mediaAssets.filter(a=>a.type==='audio')} onDeleteAsset={handleDeleteStageAsset} onAddAsset={asset=>setMediaAssets(prev=>[asset,...prev])} onAddMediaToTimeline={handleAddMediaToTimeline} onCustomFileImported={()=>{}}/></div>
+        <AudioMixer tracks={tracks.filter(t=>t.type==='audio')} master={audioMaster} playing={isPlaying} muted={isMutedMaster||!!audioMaster.mute} currentTime={currentTime} duration={totalDuration}
+          onPlay={()=>setIsPlaying(p=>!p)} onMuteMaster={()=>{const next={...audioMaster,mute:!(isMutedMaster||audioMaster.mute)};setIsMutedMaster(false);setAudioMaster(next);pushHistory(clips,tracks,next);}} onSeek={setCurrentTime}
+          onUpdate={(id,audio)=>{if(id==='master'){setAudioMaster(audio);pushHistory(clips,tracks,audio);return;}const next=tracks.map(t=>t.id===id?{...t,audio}:t);setTracks(next);tracksRef.current=next;pushHistory(clips,next);}}
+          onSolo={handleToggleTrackSolo} onMute={handleToggleTrackMute} onAdd={()=>handleAddTrack('audio',`AUDIO ${tracks.filter(t=>t.type==='audio').length+1}`)}/>
+      </div>}
+
       {/* Draggable Divider 4 (Workspace / Timeline) */}
       <div
         onMouseDown={e => {
@@ -1051,8 +1068,9 @@ export default function App() {
       {/* 3. Bottom Timeline Section */}
       <div style={{ height: `${timelineHeight}px` }} className="w-full shrink-0">
         <Timeline
-          tracks={tracks}
-          clips={clips}
+          audioOnly={workspace==='audio'}
+          tracks={workspace==='audio'?tracks.filter(t=>t.type==='audio'):tracks}
+          clips={workspace==='audio'?clips.filter(c=>c.type==='audio'):clips}
           currentTime={currentTime}
           totalDuration={totalDuration}
           selectedClipId={selectedClipId}
@@ -1067,7 +1085,7 @@ export default function App() {
           onToggleTrackMute={handleToggleTrackMute}
           onResizeTrack={(id,height)=>{const next=tracks.map(t=>t.id===id?{...t,height}:t);setTracks(next);tracksRef.current=next;}}
           onDeleteTrack={handleDeleteTrack}
-          onAddTrack={handleAddTrack}
+          onAddTrack={(type,name)=>handleAddTrack(workspace==='audio'?'audio':type,name)}
           onDuplicateTrack={id=>{try{const next=duplicateTrack(tracks,clips,id);setTracks(next.tracks);tracksRef.current=next.tracks;setClips(next.clips);clipsRef.current=next.clips;pushHistory(next.clips,next.tracks);}catch(error){setTrackConstraintWarning((error as Error).message);}}}
           onChangeSpeed={(id,level)=>{try{const old=clips.find(c=>c.id===id);if(!old)return;const next=changeClipSpeed(clips,id,level);setIsPlaying(false);setClips(next);clipsRef.current=next;pushHistory(next);if(currentTime>=old.startTime && currentTime<old.startTime+old.duration)setCurrentTime(old.startTime+(currentTime-old.startTime)*clipRate(old)/clipRate({speedLevel:level}));}catch(error){setTrackConstraintWarning((error as Error).message);}}}
           markers={markers}
@@ -1080,6 +1098,11 @@ export default function App() {
           onDeleteClip={handleDeleteClip}
         />
       </div>
+
+      <nav className="workspace-tabs" role="tablist" aria-label="Sezione di lavoro">
+        <button role="tab" aria-selected={workspace==='video'} className="video-tab" onClick={()=>{setWorkspace('video');setSelectedClipId(null);setSelectedClipIds([]);}}>VIDEO</button>
+        <button role="tab" aria-selected={workspace==='audio'} className="audio-tab" onClick={()=>{setWorkspace('audio');setSelectedClipId(null);setSelectedClipIds([]);}}>AUDIO</button>
+      </nav>
 
       {/* 4. Claude DT MCP Dialog Window */}
       <ClaudeMCPDialog
@@ -1095,6 +1118,7 @@ export default function App() {
 
       {/* 5. Export / Save Modal */}
       <ExportModal
+        audioMaster={audioMaster}
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
         clips={clips}

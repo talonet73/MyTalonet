@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 
 interface TimelineProps {
+  audioOnly?:boolean;
   tracks: Track[];
   clips: TimelineClip[];
   currentTime: number;
@@ -67,7 +68,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   onToggleTrackSolo,
   onToggleTrackMute,
   onDeleteTrack,
-  onAddTrack,onDuplicateTrack,onChangeSpeed,
+  onAddTrack,onDuplicateTrack,onChangeSpeed,audioOnly=false,
   markers,
   onAddMarker,
   onUpdateMarker,
@@ -167,6 +168,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   const [verticalZoom,setVerticalZoom]=useState(1);
   const [isAddTrackOpen, setIsAddTrackOpen] = useState(false);
   const [newTrackType, setNewTrackType] = useState<TrackType>('video');
+  useEffect(()=>{setNewTrackType(audioOnly?'audio':'video');},[audioOnly]);
   const [newTrackName, setNewTrackName] = useState('');
   const [activeMarkerEdit, setActiveMarkerEdit] = useState<TimelineMarker | null>(null);
 
@@ -1355,7 +1357,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => setNewTrackType('video')}
+                    hidden={audioOnly} onClick={() => setNewTrackType('video')}
                     className={`p-2 rounded border text-left font-bold transition-all ${
                       newTrackType === 'video'
                         ? 'bg-blue-900/60 border-blue-400 text-blue-200 shadow'
@@ -1379,7 +1381,7 @@ export const Timeline: React.FC<TimelineProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => setNewTrackType('effect')}
+                    hidden={audioOnly} onClick={() => setNewTrackType('effect')}
                     className={`p-2 rounded border text-left font-bold transition-all ${
                       newTrackType === 'effect'
                         ? 'bg-rose-900/60 border-rose-400 text-rose-200 shadow'
@@ -1389,10 +1391,10 @@ export const Timeline: React.FC<TimelineProps> = ({
                     🔴 Effetti (Rosso)
                   </button>
 
-                  <button type="button" onClick={()=>setNewTrackType('text')} className={`p-2 rounded border text-left font-bold ${newTrackType==='text'?'bg-orange-900 border-orange-400':'border-slate-600'}`}>🟠 Testo (Arancione)</button>
+                  <button type="button" hidden={audioOnly} onClick={()=>setNewTrackType('text')} className={`p-2 rounded border text-left font-bold ${newTrackType==='text'?'bg-orange-900 border-orange-400':'border-slate-600'}`}>🟠 Testo (Arancione)</button>
                   <button
                     type="button"
-                    onClick={() => setNewTrackType('image')}
+                    hidden={audioOnly} onClick={() => setNewTrackType('image')}
                     className={`p-2 rounded border text-left font-bold transition-all ${
                       newTrackType === 'image'
                         ? 'bg-amber-900/60 border-amber-400 text-amber-200 shadow'

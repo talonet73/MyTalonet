@@ -1,6 +1,7 @@
 import {clipRate} from './clipSpeed';
 import type { TimelineClip, Track, SubtitleItem, MediaAsset } from '../types/editor';
 export interface TimelineState {
+  audioMaster?: import('./audioMixer').AudioSettings;
   clips: TimelineClip[];
   tracks: Track[];
   subtitles: SubtitleItem[];

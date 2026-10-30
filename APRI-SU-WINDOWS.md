@@ -17,7 +17,7 @@ Se compare un blocco di sicurezza di Windows, controlla provenienza e messaggio 
 
 Il primo file usa il programma di installazione di Windows per Node.js LTS, Python 3.12, FFmpeg e i componenti Microsoft necessari. Rimangono attive le verifiche normali delle fonti e dei pacchetti. Il secondo installa le versioni dell’app conservate nel progetto, usa PyAV 16.1.0 e salva il modello vocale nella cartella personale di Windows. Prepara anche BG Remover con un ambiente separato e un modello gratuito da circa 4,6 MB. Non serve un abbonamento a servizi di riconoscimento vocale.
 
-L’app e stata avviata e verificata realmente nel browser dell’ambiente Linux di sviluppo, con 62 test principali e 22 prove browser superate. Non e disponibile una macchina Windows in questo ambiente: la procedura di installazione Windows e predisposta, ma non e stata eseguita su Windows. Un eventuale errore specifico di quel sistema va verificato sulla macchina interessata.
+L’app e stata avviata e verificata realmente nel browser dell’ambiente Linux di sviluppo, con 77 test principali e 25 prove browser superate. Non e disponibile una macchina Windows in questo ambiente: la procedura di installazione Windows e predisposta, ma non e stata eseguita su Windows. Un eventuale errore specifico di quel sistema va verificato sulla macchina interessata.
 
 YouTube diretto rimane soggetto alle restrizioni di rete. Il pulsante **Carica video locale**, presente nella finestra YouTube, consente di importare un file gia sul tuo computer. Nessun blocco viene aggirato.
 
@@ -29,3 +29,7 @@ Nella nuova versione, per i sottotitoli premi **Captions → Trascrivi audio**, 
 Velocità: clic destro su una clip, **Velocità clip…**, scegli da −5 (25%) a +5 (400%), poi **Applica velocità**. Lo zero corrisponde al 100%. Per duplicare un livello usa il pulsante con due fogli accanto al suo nome. Con molte piste scorri nella timeline; tieni premuto **Ctrl** e muovi la rotella per ingrandire/ridurre mattoncini e piste insieme.
 
 Con **2-AVVIA-TALEDIT.cmd**, Screenshot salva automaticamente un PNG nella cartella Download di Windows e mostra una conferma nell’app. Se la cartella non è scrivibile viene usato il download del browser. Per l’avvio manuale si può configurare `SCREENSHOT_DIR`; se non è configurato, la destinazione dipende dalle impostazioni di download del browser.
+
+## Aprire il mixer audio
+
+Premi **AUDIO**, in verde in basso. Trovi le sole piste audio e una colonna di manopole per ogni pista; **MASTER** regola tutto il suono insieme. Premi il triangolo per ascoltare, trascina le manopole verso l’alto o il basso e fai doppio clic per riportarle al valore iniziale. Puoi anche scrivere il valore sotto la manopola. **FX** confronta l’audio con e senza le regolazioni, **S** ascolta una pista da sola e il simbolo dell’altoparlante la silenzia. Scorri per raggiungere gli altri controlli o le altre piste. Premi **VIDEO**, in blu, per tornare al montaggio. **Salva** conserva anche il mixer; **Esporta** applica le regolazioni al file finale.

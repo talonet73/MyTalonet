@@ -288,3 +288,42 @@ test('local-save Screenshot response confirms Downloads without a second browser
   await page.route('**/api/screenshot',async route=>{const response=await route.fetch();expect(response.ok()).toBe(true);await route.fulfill({response,json:{...(await response.json()),savedToDownloads:true}});});
   await page.getByRole('button',{name:'Screenshot',exact:true}).click();await expect(page.getByText(/^Screenshot salvato in Download:/)).toBeVisible();expect(downloads).toBe(0);
 });
+
+test('audio workspace has only audio lanes, working knobs, track controls and saved master',async({page})=>{
+  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+  await project(page,[clip(video,'picture'),clip(voice,'speech',{duration:voice.durationSec})]);
+  await page.getByRole('tab',{name:'AUDIO',exact:true}).click();const mixer=page.getByRole('region',{name:'Mixer audio'});
+  await expect(mixer).toBeVisible();await expect(page.locator('[data-track-id=v]')).toHaveCount(0);await expect(page.locator('[data-track-id=i]')).toHaveCount(0);await expect(page.locator('[data-track-id=a]')).toBeVisible();
+  const values:any={Volume:-6,Panorama:20,'Ampiezza stereo':125,Compressione:65,'Soglia compressore':-20,'Rapporto compressore':3,Attacco:5,Rilascio:100,Ritardo:50,Eco:20,Riverbero:15,'Riduzione rumore':25,'Filtro passa alto':80,'Filtro passa basso':16000,Bassi:2,Medi:-2,Alti:3};
+  const keys=['volume','pan','width','compression','threshold','ratio','attack','release','delay','echo','reverb','noise','highpass','lowpass','bass','mid','treble'];let i=0;
+  for(const [label,value] of Object.entries(values)){await mixer.getByRole('spinbutton',{name:`AUDIO ${label} valore`,exact:true}).fill(String(value));const key=keys[i++];await expect.poll(async()=>(await state(page)).tracks.find((t:any)=>t.id==='a').audio?.[key]).toBe(value);}
+  const knob=mixer.getByRole('slider',{name:'AUDIO Volume',exact:true});await knob.focus();await page.keyboard.press('ArrowDown');await expect(knob).toHaveAttribute('aria-valuenow','-7');
+  await knob.dblclick();await expect(knob).toHaveAttribute('aria-valuenow','0');
+  const box=(await knob.boundingBox())!;await page.mouse.move(box.x+22,box.y+22);await page.mouse.down();await page.mouse.move(box.x+22,box.y+37);await page.mouse.up();await expect.poll(async()=>Number(await knob.getAttribute('aria-valuenow'))).toBeLessThan(0);
+  await mixer.getByRole('button',{name:'Bypass AUDIO',exact:true}).click();await expect.poll(async()=>(await state(page)).tracks.find((t:any)=>t.id==='a').audio.bypass).toBe(true);
+  await mixer.getByRole('button',{name:'Solo AUDIO',exact:true}).click();await expect.poll(async()=>(await state(page)).tracks.find((t:any)=>t.id==='a').isSolo).toBe(true);await mixer.getByRole('button',{name:'Solo AUDIO',exact:true}).click();
+  await mixer.getByRole('button',{name:'Mute AUDIO',exact:true}).click();await expect.poll(async()=>(await state(page)).tracks.find((t:any)=>t.id==='a').isMuted).toBe(true);await mixer.getByRole('button',{name:'Mute AUDIO',exact:true}).click();
+  await mixer.getByRole('spinbutton',{name:'MASTER Volume valore',exact:true}).fill('-9');await expect.poll(async()=>(await state(page)).audioMaster?.volume).toBe(-9);
+  await page.getByRole('button',{name:'Indietro',exact:true}).click();await expect.poll(async()=>(await state(page)).audioMaster?.volume).toBeUndefined();await page.getByRole('button',{name:'Avanti',exact:true}).click();await expect.poll(async()=>(await state(page)).audioMaster?.volume).toBe(-9);
+  await mixer.getByRole('button',{name:'Mute MASTER',exact:true}).click();await expect.poll(async()=>(await state(page)).audioMaster.mute).toBe(true);await mixer.getByRole('button',{name:'Mute MASTER',exact:true}).click();
+  await mixer.getByRole('button',{name:'Pista audio',exact:true}).click();await expect(mixer.getByRole('article')).toHaveCount(3);
+  await page.getByRole('button',{name:'Duplica pista "AUDIO"',exact:true}).click();await expect(mixer.getByRole('article')).toHaveCount(4);await expect.poll(async()=>(await state(page)).tracks.find((t:any)=>t.name==='AUDIO (Copia)')?.audio?.volume).toBeLessThan(0);
+  const saved=page.waitForEvent('download');await page.getByRole('button',{name:'Salva',exact:true}).click();const file='/tmp/audio-mixer-saved.tal';await(await saved).saveAs(file);const data=JSON.parse(fs.readFileSync(file,'utf8'));expect(data.audioMaster.volume).toBe(-9);expect(data.tracks.find((t:any)=>t.id==='a').audio.highpass).toBe(80);
+  await mixer.getByRole('button',{name:'Ripristina MASTER',exact:true}).click();await page.locator('input[type=file]').first().setInputFiles(file);await expect.poll(async()=>(await state(page)).audioMaster?.volume).toBe(-9);
+  await page.screenshot({path:'/tmp/taledit-audio-mixer.png'});await page.getByRole('tab',{name:'VIDEO',exact:true}).click();await expect(page.getByTestId('player-canvas')).toBeVisible();await expect(page.locator('[data-track-id=v]')).toBeVisible();await expect.poll(async()=>(await state(page)).clips.some((c:any)=>c.id==='picture')).toBe(true);expect(errors).toEqual([]);
+});
+
+test('live audio buses show actual signal, volume changes, bypass and master mute',async({page})=>{
+  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+  await project(page,[clip(video,'tone',{type:'audio',trackId:'a',duration:4})]);await page.getByRole('tab',{name:'AUDIO',exact:true}).click();const mixer=page.getByRole('region',{name:'Mixer audio'});
+  const meter=mixer.getByRole('meter',{name:'Livello master',exact:true});
+  await mixer.getByRole('button',{name:'Riproduci audio'}).click();await expect.poll(async()=>Number(await meter.getAttribute('aria-valuenow'))).toBeGreaterThan(-30);
+  await mixer.getByRole('button',{name:'Pausa audio'}).click();await mixer.getByRole('slider',{name:'Posizione audio'}).fill('0');
+  await mixer.getByRole('spinbutton',{name:'MASTER Volume valore',exact:true}).fill('-30');await mixer.getByRole('button',{name:'Riproduci audio'}).click();await expect.poll(async()=>Number(await meter.getAttribute('aria-valuenow'))).toBeLessThan(-40);
+  await mixer.getByRole('button',{name:'Bypass MASTER'}).click();await expect.poll(async()=>Number(await meter.getAttribute('aria-valuenow'))).toBeGreaterThan(-30);
+  await mixer.getByRole('button',{name:'Mute MASTER'}).click();await expect.poll(async()=>Number(await meter.getAttribute('aria-valuenow'))).toBe(-60);
+  await mixer.getByRole('button',{name:'Pausa audio'}).click();await mixer.getByRole('button',{name:'Ripristina MASTER'}).click();
+  // Exercise every live DSP node, including the real AudioWorklet noise processor.
+  for(const [label,value] of [['Compressione',70],['Ritardo',20],['Eco',30],['Riverbero',25],['Riduzione rumore',40],['Filtro passa alto',80],['Filtro passa basso',16000],['Bassi',3],['Medi',-2],['Alti',2],['Ampiezza stereo',130],['Panorama',10]] as const)await mixer.getByRole('spinbutton',{name:`AUDIO ${label} valore`,exact:true}).fill(String(value));
+  await mixer.getByRole('slider',{name:'Posizione audio'}).fill('0');await mixer.getByRole('button',{name:'Riproduci audio'}).click();await expect.poll(async()=>Number(await meter.getAttribute('aria-valuenow'))).toBeGreaterThan(-45);await page.waitForTimeout(400);expect(errors).toEqual([]);
+});

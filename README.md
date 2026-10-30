@@ -146,3 +146,13 @@ Il pulsante con due fogli accanto al nome della pista la duplica con tutti i mat
 Sono stati rimossi i precedenti limiti numerici di piste e clip multimediali dell’editor. Le barre della timeline permettono scorrimento verticale e orizzontale; la rotella funziona anche sopra i nomi delle piste. La capacità effettiva dipende da RAM, CPU e dimensione del progetto: non equivale a risorse infinite. Restano i limiti di 10 minuti di esportazione, 2000 testi, due rendering simultanei e richieste JSON da 5 MB. Le piste vuote e gli effetti fuori dall’intervallo esportato non generano ingressi FFmpeg inutili.
 
 Verifiche di questo intervento: [docs/speed-layers-verification.md](docs/speed-layers-verification.md).
+
+## Mixer audio
+
+Le schede in basso **VIDEO** (blu) e **AUDIO** (verde) cambiano sezione mantenendo lo stesso progetto. AUDIO mostra soltanto piste e file audio; puoi importare un file, aggiungere una pista o duplicare quelle esistenti. L’audio separato dai video è già disponibile nelle relative piste.
+
+Ogni pista ha manopole per **volume, panorama, ampiezza stereo, compressione con soglia/rapporto/attacco/rilascio, ritardo, eco, riverbero, riduzione rumore, filtri passa alto/basso ed equalizzazione bassi/medi/alti**. La striscia **MASTER** regola il mix completo. I meter mostrano livelli reali durante l’ascolto. Solo, Mute, bypass FX e ripristino permettono di confrontare le modifiche.
+
+Trascina una manopola su/giù, usa le frecce o modifica il numero sottostante. Il doppio clic torna al valore neutro. Le regolazioni vengono salvate nel progetto, conservate con Annulla/Ripristina e applicate all’esportazione video e audio. Il Mute Master viene esportato; il Mute del player VIDEO agisce solo sull’ascolto. La riduzione rumore attenua il fondo nelle pause tramite un espansore; non è una separazione AI della voce.
+
+Architettura, intervalli dei controlli e verifiche: [docs/audio-mixer-verification.md](docs/audio-mixer-verification.md).

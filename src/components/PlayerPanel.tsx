@@ -13,6 +13,8 @@ import { playbackEngine } from '../services/playbackEngine';
 import { TimelineClip, SubtitleItem } from '../types/editor';
 
 interface PlayerPanelProps {
+  tracks?: import('../types/editor').Track[];
+  audioMaster?:import('../services/audioMixer').AudioSettings;
   currentTime: number;
   totalDuration: number;
   isPlaying: boolean;
@@ -27,6 +29,7 @@ interface PlayerPanelProps {
 }
 
 export const PlayerPanel: React.FC<PlayerPanelProps> = ({
+  tracks=[],audioMaster,
   currentTime,
   totalDuration,
   isPlaying,
@@ -61,7 +64,7 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
   const videoClips = clips
     .filter(c => c.type === 'video')
     .map(c => ({
-      id: c.id,
+      id: c.id,trackId:c.trackId,
       name: c.name,speedLevel:c.speedLevel,
       transparency: c.transparency,
       effects: c.effects, adjustments: c.adjustments,
@@ -80,7 +83,7 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
   const audioClips = clips
     .filter(c => c.type === 'audio')
     .map(c => ({
-      id: c.id,
+      id: c.id,trackId:c.trackId,
       name: c.name,speedLevel:c.speedLevel,
       volumeDb: c.volumeDb,
       fadeIn:c.fadeIn,fadeOut:c.fadeOut,
@@ -93,7 +96,7 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
   const effectClips = clips
     .filter(c => c.type === 'effect')
     .map(c => ({
-      id: c.id,
+      id: c.id,trackId:c.trackId,
       name: c.name,speedLevel:c.speedLevel,
       fadeIn: c.fadeIn,
       fadeOut: c.fadeOut,
@@ -106,7 +109,7 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
   const imageClips = clips
     .filter(c => c.type === 'image')
     .map(c => ({
-      id: c.id,
+      id: c.id,trackId:c.trackId,
       name: c.name,speedLevel:c.speedLevel,
       transparency: c.transparency,
       effects: c.effects, adjustments: c.adjustments,
@@ -131,14 +134,14 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
   // Prepare paused frames explicitly as well as listening for decoder events.
   useEffect(() => {
     let cancelled=false;
-    playbackEngine.syncMedia(currentTime, isPlaying, videoClips, audioClips, isMuted);
+    playbackEngine.syncMedia(currentTime, isPlaying, videoClips, audioClips, isMuted, tracks,audioMaster);
     const canvas=canvasRef.current;
     if(canvas){
       if(isPlaying)playbackEngine.renderFrame(canvas,currentTime,videoClips,effectClips,imageClips,subtitles);
       else void playbackEngine.prepareAndRenderFrame(canvas,currentTime,videoClips,effectClips,imageClips,subtitles,()=>!cancelled);
     }
     return()=>{cancelled=true;};
-  }, [currentTime, isPlaying, clips, subtitles, isMuted]);
+  }, [currentTime, isPlaying, clips, subtitles, isMuted,tracks,audioMaster]);
 
   // Pause everything on unmount
   useEffect(() => {

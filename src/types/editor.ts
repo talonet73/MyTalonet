@@ -49,6 +49,7 @@ export interface Track {
   isMuted: boolean;
   headerBg: string;
   laneBg: string;
+  audio?: import('../services/audioMixer').AudioSettings;
   height?: number; // preferred row height before fitting the timeline viewport
 }
 
@@ -62,6 +63,7 @@ export interface MediaAsset {
   fileUrl?: string;
   hasAudio?: boolean;
   width?: number;
+  audio?: import('../services/audioMixer').AudioSettings;
   height?: number;
   isLost?: boolean;
   downloadProgress?: number; // 0 to 100 (%)

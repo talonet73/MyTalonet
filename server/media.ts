@@ -1,3 +1,4 @@
+import {audioFilters,validateAudio} from '../src/services/audioMixer';
 import {clipRate,sourceTime,tempoFilters,validSpeedLevel} from '../src/services/clipSpeed';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -64,6 +65,7 @@ export async function exportMedia(body: any, options:{screenshot?:boolean}={}) {
   const weight = number(body.weightPercentage, 55, 1, 100);
   if (!Array.isArray(body.clips) || body.clips.filter((c:TimelineClip)=>c.type==='text').length>2000 || !body.clips.length) throw new InputError('Aggiungi almeno una clip alla timeline (massimo 2000 testi).');
   if (body.tracks !== undefined && !Array.isArray(body.tracks)) throw new InputError('Tracce non valide.');
+  try{validateAudio(body.audioMaster);for(const t of body.tracks||[])validateAudio(t.audio);}catch(error){throw new InputError((error as Error).message);}
   const clips = activeClips(body.clips, body.tracks);
   for (const clip of clips) {
     if(!validSpeedLevel(clip.speedLevel))throw new InputError('Velocità clip non valida: da -5 a +5.');
@@ -116,6 +118,7 @@ export async function exportMedia(body: any, options:{screenshot?:boolean}={}) {
     filters.push(`[0:v]setpts=PTS-STARTPTS+${frameTime}/TB[base]`); input++;
   }
   const audioTags: string[] = [];
+  const audioTrackIds=new Map<string,string>();
   for (const clip of resolved.sort((a,b)=>a.startTime-b.startTime)) {
     const visual = !audioOnly && (clip.type === 'video' || clip.type === 'image');
     const separateAudio = clip.type === 'video' && (clip.linkedClipId || body.clips.some((c: TimelineClip) => c.type === 'audio' && c.linkedClipId === clip.id));
@@ -138,7 +141,7 @@ export async function exportMedia(body: any, options:{screenshot?:boolean}={}) {
       const volume = clip.volumeDb <= -60 ? '0' : `${clip.volumeDb || 0}dB`;
       const fade = `${clip.fadeIn ? `,afade=t=in:d=${clip.fadeIn}` : ''}${clip.fadeOut ? `,afade=t=out:st=${Math.max(0, clip.duration - clip.fadeOut)}:d=${clip.fadeOut}` : ''}`;
       filters.push(`[${idx}:a]asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,${tempoFilters(clipRate(clip)).map(f=>f+',').join('')}volume=${volume}${fade},apad,atrim=duration=${Math.min(clip.duration,duration-clip.startTime)},adelay=${Math.round(clip.startTime * 1000)}:all=1[${a}]`);
-      audioTags.push(`[${a}]`);
+      audioTags.push(`[${a}]`);audioTrackIds.set(`[${a}]`,clip.trackId);
     }
   }
   if (!audioOnly) {
@@ -163,8 +166,15 @@ export async function exportMedia(body: any, options:{screenshot?:boolean}={}) {
       filters.push(`[${original}][fxalpha${i}]overlay=eof_action=pass:repeatlast=0:enable='gte(t,${effect.startTime})*lt(t,${effect.startTime+effect.duration})'[${next}]`);layer=next;
     }
   }
-  if (!still && audioTags.length) {
-    filters.push(`${audioTags.join('')}amix=inputs=${audioTags.length}:normalize=0:dropout_transition=0,alimiter=limit=0.95:level=false:latency=true,apad,atrim=duration=${duration}[audio]`);
+  // Mix clips into track buses before processing, so compressors respond to the whole track.
+  const busTags:string[]=[];
+  for(const trackId of new Set(audioTags.map(tag=>audioTrackIds.get(tag)!))){
+    const tags=audioTags.filter(tag=>audioTrackIds.get(tag)===trackId);
+    const chain=audioFilters(body.tracks?.find((t:Track)=>t.id===trackId)?.audio);
+    const bus=`bus${busTags.length}`;filters.push(`${tags.join('')}amix=inputs=${tags.length}:normalize=0:dropout_transition=0${chain.length?','+chain.join(','):''}[${bus}]`);busTags.push(`[${bus}]`);
+  }
+  if (!still && busTags.length) {
+    filters.push(`${busTags.join('')}amix=inputs=${busTags.length}:normalize=0:dropout_transition=0${audioFilters(body.audioMaster).length?','+audioFilters(body.audioMaster).join(','):''},alimiter=limit=0.95:level=false:latency=true,apad,atrim=duration=${duration}[audio]`);
   } else if(!still) {
     if (audioOnly) throw new InputError('Nessuna traccia audio attiva da esportare.');
     filters.push(`anullsrc=r=48000:cl=stereo,atrim=duration=${duration}[audio]`);

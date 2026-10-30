@@ -345,3 +345,14 @@ test('local Screenshot saves a real PNG directly to Downloads and keeps browser 
     const fallback=await api('/api/screenshot',{durationSec:2,frameTime:.2,clips:[clip(video)]});assert.equal(fallback.status,200);assert.equal(fallback.data.savedToDownloads,false);assert.equal((await fetch(base+fallback.data.downloadUrl)).status,200);
   }finally{if(original===undefined)delete process.env.SCREENSHOT_DIR;else process.env.SCREENSHOT_DIR=original;}
 });
+
+test('mixer track and master settings process actual exported audio, including summed clips and mute',async()=>{
+  const tracks=[{id:'mix',name:'Mix',type:'audio',isMuted:false,isSolo:false,audio:{volume:-6}}];
+  const clips=[clip(video,{id:'a1',type:'audio',trackId:'mix'}),clip(video,{id:'a2',type:'audio',trackId:'mix'})];
+  const plain=await exported({format:'wav',clips,tracks:tracks.map(t=>({...t,audio:{}}))});const baseline=rms(await samples(plain.file));
+  const mixed=await exported({format:'wav',clips,tracks,audioMaster:{volume:-6}});assert.ok(Math.abs(rms(await samples(mixed.file))/baseline-10**(-12/20))<.015);
+  const muted=await exported({format:'wav',clips,tracks,audioMaster:{mute:true}});assert.equal(rms(await samples(muted.file)),0);
+  const bypassed=await exported({format:'wav',clips,tracks:tracks.map(t=>({...t,audio:{volume:-40,bypass:true}}))});assert.ok(Math.abs(rms(await samples(bypassed.file))/baseline-1)<.01);
+  const invalid=await api('/api/export',{format:'wav',durationSec:2,clips,tracks,audioMaster:{volume:100}});assert.equal(invalid.status,400);
+  const compressor=await exported({format:'wav',clips,tracks:tracks.map(t=>({...t,audio:{compression:100,threshold:-35,ratio:12,attack:2,release:100}}))});assert.ok(rms(await samples(compressor.file))<baseline*.4);
+});

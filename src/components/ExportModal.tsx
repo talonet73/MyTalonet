@@ -25,6 +25,7 @@ import {EXPORT_FORMATS,categoryOf,type ExportCategory} from '../services/exportF
 import { PlaybackEngine, playbackEngine } from '../services/playbackEngine';
 
 interface ExportModalProps {
+  audioMaster?:import('../services/audioMixer').AudioSettings;
   isOpen: boolean;
   onClose: () => void;
   clips: TimelineClip[];
@@ -35,6 +36,7 @@ interface ExportModalProps {
 }
 
 export const ExportModal: React.FC<ExportModalProps> = ({
+  audioMaster,
   isOpen,
   onClose,
   clips,
@@ -147,7 +149,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     try {
       const result = await executeProjectExport(
         {
-          format,
+          format,audioMaster,
           resolution,
           weightPercentage,
           durationSec: contentDuration,
@@ -188,7 +190,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       version: '2.1.0',captionWorkflow:'timeline',
       exportedAt: new Date().toISOString(),
       aspectRatio,currentTime,
-      tracks,
+      tracks,audioMaster,
       clips,
       subtitles,
     };

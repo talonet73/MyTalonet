@@ -1,3 +1,6 @@
+import {LiveAudioMixer} from './liveAudioMixer';
+import type {AudioSettings} from './audioMixer';
+import type {Track} from '../types/editor';
 import {clipRate,sourceTime} from './clipSpeed';
 import { adjustPixels, clipAlpha, colorSettings, motionAt, effectAmount, effectMix, type VisualSettings } from './visualSettings';
 /**
@@ -8,6 +11,7 @@ import { adjustPixels, clipAlpha, colorSettings, motionAt, effectAmount, effectM
  */
 
 export interface VideoClipData extends Partial<VisualSettings> {
+  trackId?:string;
   id: string;
   name: string;
   transparency: number;
@@ -22,6 +26,7 @@ export interface VideoClipData extends Partial<VisualSettings> {
 
 export interface AudioClipData {
   speedLevel?:number;
+  trackId?:string;
   id: string;
   name: string;
   volumeDb: number;
@@ -66,6 +71,9 @@ export class PlaybackEngine {
   private audioCache = new Map<string, HTMLAudioElement>();
   private imageCache = new Map<string, HTMLImageElement>();
   private audioContext: AudioContext | null = null;
+  private mixer:LiveAudioMixer|null=null;
+  private gainRoutes=new Map<HTMLMediaElement,AudioNode>();
+  public audioLevel(id:string){return this.mixer?.level(id) || {peak:0,rms:0};}
   private gains = new Map<HTMLMediaElement, GainNode>();
   private onFrameReady: (() => void) | null = null;
   private notify = () => this.onFrameReady?.();
@@ -92,16 +100,20 @@ export class PlaybackEngine {
     if (!image) { image = new Image(); image.crossOrigin = 'anonymous'; image.onload = this.notify; image.src = url; this.imageCache.set(url, image); }
     return image;
   }
-  private gain(element: HTMLMediaElement, db: number, muted: boolean, playing: boolean, amplitude = 1) {
+  private gain(element: HTMLMediaElement, db: number, muted: boolean, playing: boolean, amplitude = 1,trackId="") {
     // Do not create an AudioContext until the user starts playback.
     if (!playing) return;
     if (!this.audioContext) this.audioContext = new AudioContext();
     let gain = this.gains.get(element);
-    if (!gain) { gain = this.audioContext.createGain(); this.audioContext.createMediaElementSource(element).connect(gain); gain.connect(this.audioContext.destination); this.gains.set(element, gain); }
+    if (!gain) { gain = this.audioContext.createGain(); this.audioContext.createMediaElementSource(element).connect(gain); this.gains.set(element, gain); }
+    const destination=this.mixer?.input(trackId)||this.audioContext.destination;
+    if(this.gainRoutes.get(element)!==destination){gain.disconnect();gain.connect(destination);this.gainRoutes.set(element,destination);}
     gain.gain.value = muted || db <= -60 ? 0 : Math.pow(10, db / 20) * amplitude;
     if (this.audioContext.state === 'suspended') void this.audioContext.resume();
   }
-  public syncMedia(time: number, playing: boolean, videos: VideoClipData[], audios: AudioClipData[], muted: boolean) {
+  public syncMedia(time: number, playing: boolean, videos: VideoClipData[], audios: AudioClipData[], muted: boolean, tracks:Track[]=[], master?:AudioSettings) {
+    if(playing&&!this.audioContext)this.audioContext=new AudioContext();
+    if(this.audioContext){if(!this.mixer)this.mixer=new LiveAudioMixer(this.audioContext);this.mixer.configure(tracks,master,playing,muted);}
     const videoIds = new Set<string>(), audioIds = new Set<string>();
     const sync = (element: HTMLMediaElement, target: number,rate:number) => {
       element.playbackRate=rate;element.preservesPitch=true;
@@ -113,12 +125,12 @@ export class PlaybackEngine {
     for (const clip of videos) if (clip.mediaUrl && time >= clip.startTime && time < clip.startTime + clip.duration) {
       videoIds.add(clip.id); const element = this.getVideoElement(clip.mediaUrl, clip.id);
       element.muted = muted || Boolean(clip.hasSeparateAudioClip);
-      if (!clip.hasSeparateAudioClip) this.gain(element, clip.volumeDb || 0, muted, playing, clipAlpha({...clip,transparency:100},time-clip.startTime));
+      if (!clip.hasSeparateAudioClip) this.gain(element, clip.volumeDb || 0, muted, playing, clipAlpha({...clip,transparency:100},time-clip.startTime),clip.trackId);
       sync(element, Math.max(0, sourceTime(clip,time)),clipRate(clip));
     }
     for (const clip of audios) if (clip.mediaUrl && time >= clip.startTime && time < clip.startTime + clip.duration) {
       audioIds.add(clip.id); const element = this.getAudioElement(clip.mediaUrl, clip.id);
-      element.muted = muted; this.gain(element, clip.volumeDb, muted, playing, clipAlpha({...clip,transparency:100},time-clip.startTime));
+      element.muted = muted; this.gain(element, clip.volumeDb, muted, playing, clipAlpha({...clip,transparency:100},time-clip.startTime),clip.trackId);
       sync(element, Math.max(0, sourceTime(clip,time)),clipRate(clip));
     }
     for (const [key, element] of this.videoCache) if (!videoIds.has(key)) element.pause();
@@ -224,11 +236,11 @@ export class PlaybackEngine {
       lines.forEach((line,i)=>ctx.fillText(line,width/2,height-h-14-row+(i+1)*(font+4),width-24));ctx.restore();
     }
   }
-  public pauseAll() { this.videoCache.forEach(v => v.pause()); this.audioCache.forEach(a => a.pause()); }
+  public pauseAll() { this.mixer?.configure([],undefined,false,true); this.videoCache.forEach(v => v.pause()); this.audioCache.forEach(a => a.pause()); }
   public dispose() {
     this.pauseAll(); this.onFrameReady = null;
     for (const element of [...this.videoCache.values(), ...this.audioCache.values()]) { element.removeAttribute('src'); element.load(); }
-    this.videoCache.clear(); this.audioCache.clear(); this.imageCache.clear(); this.frameCache.clear(); this.gains.clear();
+    this.videoCache.clear(); this.audioCache.clear(); this.imageCache.clear(); this.frameCache.clear(); this.gains.clear();this.gainRoutes.clear();this.mixer=null;
     if (this.audioContext) void this.audioContext.close(); this.audioContext = null;
   }
 }

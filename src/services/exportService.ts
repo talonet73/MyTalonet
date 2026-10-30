@@ -2,6 +2,7 @@ import type { TimelineClip, SubtitleItem, Track } from '../types/editor';
 import {categoryOf,type ExportFormat} from './exportFormats';
 export type {ExportFormat} from './exportFormats';
 export interface ExportSettings {
+  audioMaster?:import('./audioMixer').AudioSettings;
   format: ExportFormat;
   resolution: '4K' | '1080p' | '720p';
   weightPercentage: number;
