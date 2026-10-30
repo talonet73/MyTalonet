@@ -1,3 +1,4 @@
+import {applyGrade,hasGrade} from './colorGrade';
 import {LiveAudioMixer} from './liveAudioMixer';
 import type {AudioSettings} from './audioMixer';
 import type {Track} from '../types/editor';
@@ -181,10 +182,10 @@ export class PlaybackEngine {
       const ratio=Math.min(width/w,height/h);
       target.drawImage(source,(width-w*ratio)/2,(height-h*ratio)/2,w*ratio,h*ratio);
       const color=colorSettings(settings);
-      if(Object.values(color).some(Boolean) || settings.effects?.includes('glitch')) {
-        const pixels=target.getImageData(0,0,width,height);adjustPixels(pixels.data,settings);
-        if(color.sharpness) {
-          const original=new Uint8ClampedArray(pixels.data),amount=color.sharpness/100*1.5;
+      if(Object.values(color).some(Boolean) || hasGrade(settings.colorGrade) || settings.effects?.includes('glitch')) {
+        const pixels=target.getImageData(0,0,width,height);adjustPixels(pixels.data,settings);applyGrade(pixels.data,settings.colorGrade);
+        if(color.sharpness || (!settings.colorGrade?.bypass && settings.colorGrade?.sharpness)) {
+          const original=new Uint8ClampedArray(pixels.data),amount=Math.min(100,color.sharpness+(settings.colorGrade?.bypass?0:settings.colorGrade?.sharpness||0))/100*1.5;
           for(let y=1;y<height-1;y++)for(let x=1;x<width-1;x++)for(let c=0;c<3;c++) {
             const i=(y*width+x)*4+c;let blur=0;
             for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)blur+=original[i+(dy*width+dx)*4]*(dx===0?2:1)*(dy===0?2:1)/16;

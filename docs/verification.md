@@ -55,9 +55,9 @@ Il test browser provoca un errore 403 controllato e successivamente carica un ve
 ## Esito finale dei comandi eseguiti
 
 - `npm run lint`: **PASS**, controllo TypeScript.
-- `npm test`: **PASS, 77/77**, inclusa la trascrizione reale via API, export, mix, immagini, mute/solo e MCP HTTP/SSE.
+- `npm test`: **PASS, 86/86**, inclusa la trascrizione reale via API, export, mix, immagini, mute/solo e MCP HTTP/SSE.
 - `npm run test:whisper`: **PASS**, riconoscimento di parlato noto e assenza di testo sul silenzio.
-- `npm run test:e2e`: **PASS, 25/25** test browser, inclusi fallback locale dopo 403 e download dell’export reale.
+- `npm run test:e2e`: **PASS, 27/27** test browser, inclusi fallback locale dopo 403 e download dell’export reale.
 - `git diff --check`: **PASS**, verifica formale delle modifiche.
 - `pip check`: **PASS**, nessun requisito incompatibile.
 - Build produzione eseguita dal runner browser: **PASS**.
@@ -70,3 +70,5 @@ Controllo aggiuntivo di Effects, Transitions, Captions, Adjustment e degli altri
 Aggiornamento del 29 ottobre 2026: [velocità, Screenshot e livelli](speed-layers-verification.md).
 
 Aggiornamento del 30 ottobre 2026: [sezioni VIDEO/AUDIO e mixer](audio-mixer-verification.md).
+
+Aggiornamento COLOR del 30 ottobre 2026: [controlli, monitor e scopes](color-verification.md).

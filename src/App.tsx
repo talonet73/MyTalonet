@@ -1,3 +1,5 @@
+import {ColorPanel} from './components/ColorPanel';
+import {validateGrade} from './services/colorGrade';
 import {AudioMixer} from './components/AudioMixer';
 import {validateAudio,type AudioSettings} from './services/audioMixer';
 import {changeClipSpeed,clipRate,validSpeedLevel} from './services/clipSpeed';
@@ -90,7 +92,7 @@ const INITIAL_CLIPS: TimelineClip[] = [];
 const INITIAL_SUBTITLES: SubtitleItem[] = [];
 
 export default function App() {
-  const [workspace,setWorkspace]=useState<'video'|'audio'>('video');
+  const [workspace,setWorkspace]=useState<'video'|'audio'|'color'>('video');
   const [audioMaster,setAudioMaster]=useState<AudioSettings>({});
   const audioMasterRef=useRef(audioMaster);audioMasterRef.current=audioMaster;
   // Timeline State
@@ -380,7 +382,7 @@ export default function App() {
         const content = evt.target?.result as string;
         const data = JSON.parse(content);
         if (data.appName !== 'TALEDIT' || !Array.isArray(data.tracks) || !Array.isArray(data.clips) || data.clips.some((c: any) => !c.id || !['video','audio','image','effect','text'].includes(c.type) || !Number.isFinite(c.startTime) || c.startTime < 0 || !Number.isFinite(c.duration) || c.duration <= 0 || !validSpeedLevel(c.speedLevel))) throw new Error('Progetto TALEDIT non valido.');
-        validateAudio(data.audioMaster);for(const t of data.tracks)validateAudio(t.audio);
+        validateAudio(data.audioMaster);for(const t of data.tracks)validateAudio(t.audio);for(const c of data.clips)validateGrade(c.colorGrade);
         setAudioMaster(data.audioMaster||{});
         let normalized=normalizeTrackAssignments(data.clips,data.tracks);
         if(!normalized.tracks.some(t=>t.type==='text'))normalized.tracks.push(textTrack());
@@ -1053,6 +1055,8 @@ export default function App() {
           onSolo={handleToggleTrackSolo} onMute={handleToggleTrackMute} onAdd={()=>handleAddTrack('audio',`AUDIO ${tracks.filter(t=>t.type==='audio').length+1}`)}/>
       </div>}
 
+      {workspace==='color' && <ColorPanel clips={activeTimelineClips(clips,tracks)} selectedId={selectedClipId} currentTime={currentTime} duration={totalDuration} playing={isPlaying} aspectRatio={aspectRatio} onSelect={id=>{setSelectedClipId(id);setSelectedClipIds([id]);}} onSeek={setCurrentTime} onPlay={()=>setIsPlaying(p=>!p)} onUpdate={(id,colorGrade)=>{const next=clips.map(c=>c.id===id?{...c,colorGrade}:c);setClips(next);clipsRef.current=next;pushHistory(next);}}/>}
+
       {/* Draggable Divider 4 (Workspace / Timeline) */}
       <div
         onMouseDown={e => {
@@ -1102,6 +1106,7 @@ export default function App() {
       <nav className="workspace-tabs" role="tablist" aria-label="Sezione di lavoro">
         <button role="tab" aria-selected={workspace==='video'} className="video-tab" onClick={()=>{setWorkspace('video');setSelectedClipId(null);setSelectedClipIds([]);}}>VIDEO</button>
         <button role="tab" aria-selected={workspace==='audio'} className="audio-tab" onClick={()=>{setWorkspace('audio');setSelectedClipId(null);setSelectedClipIds([]);}}>AUDIO</button>
+        <button role="tab" aria-selected={workspace==='color'} className="color-tab" onClick={()=>{setWorkspace('color');setSelectedClipId(null);setSelectedClipIds([]);}}>COLOR</button>
       </nav>
 
       {/* 4. Claude DT MCP Dialog Window */}

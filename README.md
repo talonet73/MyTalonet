@@ -156,3 +156,9 @@ Ogni pista ha manopole per **volume, panorama, ampiezza stereo, compressione con
 Trascina una manopola su/giù, usa le frecce o modifica il numero sottostante. Il doppio clic torna al valore neutro. Le regolazioni vengono salvate nel progetto, conservate con Annulla/Ripristina e applicate all’esportazione video e audio. Il Mute Master viene esportato; il Mute del player VIDEO agisce solo sull’ascolto. La riduzione rumore attenua il fondo nelle pause tramite un espansore; non è una separazione AI della voce.
 
 Architettura, intervalli dei controlli e verifiche: [docs/audio-mixer-verification.md](docs/audio-mixer-verification.md).
+
+## COLOR e scopes
+
+La scheda **COLOR**, rossa dopo VIDEO e AUDIO, offre due monitor **Originale / Corretto**. Seleziona una clip video o immagine dalla timeline o dal menu in alto. In **Ruote** trovi Lift/Gamma/Gain/Offset con master e canali RGB; in **Primarie** esposizione, contrasto/pivot, temperatura/tinta, saturazione/vibrance, tonalità, ombre/alte luci, neri/bianchi e nitidezza. **Curve** permette di modificare Master RGB e i tre canali, trascinando sette nodi o scrivendo i valori. Bypass e Reset agiscono sul grade della clip, lasciando gli altri effetti del progetto.
+
+Waveform Y, parade RGB, istogramma e vectorscope misurano il fotogramma scelto fra Originale e Corretto. Le regolazioni COLOR vengono conservate nel progetto e applicate a video, immagini e Screenshot esportati. Il flusso è SDR Rec.709 a intervallo completo; dettagli e risultati in [docs/color-verification.md](docs/color-verification.md).

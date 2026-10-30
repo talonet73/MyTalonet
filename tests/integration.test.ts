@@ -356,3 +356,21 @@ test('mixer track and master settings process actual exported audio, including s
   const invalid=await api('/api/export',{format:'wav',durationSec:2,clips,tracks,audioMaster:{volume:100}});assert.equal(invalid.status,400);
   const compressor=await exported({format:'wav',clips,tracks:tracks.map(t=>({...t,audio:{compression:100,threshold:-35,ratio:12,attack:2,release:100}}))});assert.ok(rms(await samples(compressor.file))<baseline*.4);
 });
+
+test('COLOR corrections survive real image, video and Screenshot rendering without changing source audio',async()=>{
+  const {applyGrade}=await import('../src/services/colorGrade');const file=path.join(temp,'grade-grey.png');await ff(['-f','lavfi','-i','color=0x5080a0:s=320x180','-frames:v','1','-threads','1',file]);const asset=await upload(file);
+  const raw=await pixel(file,0),grade={exposure:.25,contrast:1.15,saturation:70,temperature:15,liftR:4,gammaG:8,gainB:-10,curves:{master:[0,.14,.3,.55,.73,.9,1]}};
+  const expected=new Uint8ClampedArray([...raw,255]);applyGrade(expected,grade);
+  const output=await exported({format:'png',clips:[clip(asset,{colorGrade:grade})]});const actual=await pixel(output.file,0);for(let i=0;i<3;i++)assert.ok(Math.abs(actual[i]-expected[i])<=3,`${actual} vs ${[...expected]}`);
+  const bypassed=await exported({format:'png',clips:[clip(asset,{colorGrade:{...grade,bypass:true}})]});const same=await pixel(bypassed.file,0);for(let i=0;i<3;i++)assert.ok(Math.abs(same[i]-raw[i])<=2);
+  const videoOut=await exported({clips:[clip(video,{colorGrade:{saturation:0}})]});const grey=await pixel(videoOut.file,.4);assert.ok(Math.max(...grey)-Math.min(...grey)<5);assert.ok(rms(await samples(videoOut.file))>.04);
+  const shot=await api('/api/screenshot',{clips:[clip(video,{colorGrade:{exposure:-1}})],frameTime:.4,durationSec:2,resolution:'720p'});assert.equal(shot.status,200,JSON.stringify(shot.data));const frame=await pixel(path.join(temp,shot.data.fileName),0);assert.ok(frame[0]>110&&frame[0]<140,`${frame}`);
+  const invalid=await api('/api/export',{clips:[clip(video,{colorGrade:{gammaY:999}})],durationSec:2});assert.equal(invalid.status,400);
+});
+test('COLOR LUT preserves image transparency when composited over another image',async()=>{
+  const raw=Buffer.alloc(8*8*4);for(let y=2;y<6;y++)for(let x=2;x<6;x++)raw.set([255,0,0,255],(y*8+x)*4);await fs.writeFile(path.join(temp,'alpha.rgba'),raw);
+  const file=path.join(temp,'alpha-grade.png');await ff(['-f','rawvideo','-pixel_format','rgba','-video_size','8x8','-i',path.join(temp,'alpha.rgba'),'-frames:v','1','-threads','1',file]);const asset=await upload(file);
+  const result=await exported({format:'png',clips:[clip(image,{id:'bg'}),clip(asset,{id:'fg',colorGrade:{exposure:-1}})]});
+  const sample=async(x:number,y:number)=>{const {stdout}=await promisify(execFile)('ffmpeg',['-v','error','-i',result.file,'-vf',`crop=1:1:${x}:${y}`,'-frames:v','1','-pix_fmt','rgb24','-f','rawvideo','pipe:1'],{encoding:'buffer'});return [...stdout];};
+  const corner=await sample(0,0),center=await sample(640,360);assert.ok(corner[1]>240&&corner[0]<10,`${corner}`);assert.ok(center[0]>110&&center[0]<140&&center[1]<10,`${center}`);
+});

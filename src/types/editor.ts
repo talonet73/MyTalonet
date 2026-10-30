@@ -33,6 +33,7 @@ export interface TimelineClip {
   text?: string;
   captionId?: string;
   adjustments?: Adjustments;
+  colorGrade?: import('../services/colorGrade').ColorGrade;
   mediaUrl?: string;
   mediaThumbnail?: string;
   subtitles?: string;

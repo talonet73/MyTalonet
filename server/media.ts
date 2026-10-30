@@ -1,3 +1,4 @@
+import {gradeCube,hasGrade,validateGrade} from '../src/services/colorGrade';
 import {audioFilters,validateAudio} from '../src/services/audioMixer';
 import {clipRate,sourceTime,tempoFilters,validSpeedLevel} from '../src/services/clipSpeed';
 import { execFile } from 'node:child_process';
@@ -68,6 +69,7 @@ export async function exportMedia(body: any, options:{screenshot?:boolean}={}) {
   try{validateAudio(body.audioMaster);for(const t of body.tracks||[])validateAudio(t.audio);}catch(error){throw new InputError((error as Error).message);}
   const clips = activeClips(body.clips, body.tracks);
   for (const clip of clips) {
+    try{validateGrade(clip.colorGrade);}catch(error){throw new InputError((error as Error).message);}
     if(!validSpeedLevel(clip.speedLevel))throw new InputError('Velocità clip non valida: da -5 a +5.');
     number(clip.startTime, 0, 0, 86400); number(clip.duration, 0, 0.001, 86400); number(clip.offset, 0, 0, 86400);
     number(clip.intensity,5,0,10);number(clip.speed,5,0,10);number(clip.effectSpan,clip.duration,.001,86400);
@@ -109,6 +111,10 @@ export async function exportMedia(body: any, options:{screenshot?:boolean}={}) {
   if (aspectRatio === '4:3') width = Math.round(height * 4 / 3 / 2) * 2;
   const videoKbps = Math.round((1500 + weight / 100 * 20500) * (resolution === '4K' ? 2.5 : resolution === '720p' ? .6 : 1));
   const audioKbps = Math.round(64 + weight / 100 * 256);
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'taledit-export-'));
+  const fileName = `${options.screenshot?'TALEDIT_Screenshot':still?'TALEDIT_Immagine':'TALEDIT_Export'}_${resolution}_${randomUUID()}.${format}`;
+  const output = path.join(downloadsDir, fileName);
+  try {
   const args = ['-hide_banner', '-loglevel', 'error', '-y', '-filter_complex_threads', '2'];
   const filters: string[] = [];
   let input = 0;
@@ -131,9 +137,11 @@ export async function exportMedia(body: any, options:{screenshot?:boolean}={}) {
     if(visual && clip.info.streams.some((s:any)=>s.codec_name==='vp9' && String(s.tags?.alpha_mode ?? s.tags?.ALPHA_MODE)==='1'))args.push('-c:v','libvpx-vp9');
     args.push('-t', String(still?Math.max(.04,.04*clipRate(clip)):Math.min(clip.duration, duration - clip.startTime)*(clip.type==='image'?1:clipRate(clip))), '-i', clip.file);
     if (visual) {
+      const lutFile=hasGrade(clip.colorGrade)?`grade-${idx}.cube`:undefined;
+      if(lutFile)await fs.writeFile(path.join(temp,lutFile),gradeCube(clip.colorGrade!));
       const v = `v${idx}`, next = `layer${idx}`;
       const alpha = (clip.transparency ?? 100) / 100;
-      filters.push(`[${idx}:v]${visualFilters(still?{...clip,startTime:frameTime,fadeIn:0,fadeOut:0,transparency:clipAlpha(clip,frameTime-clip.startTime)*100,animationOffset:frameTime-clip.startTime}:clip,width,height)}[${v}]`);
+      filters.push(`[${idx}:v]${visualFilters(still?{...clip,startTime:frameTime,fadeIn:0,fadeOut:0,transparency:clipAlpha(clip,frameTime-clip.startTime)*100,animationOffset:frameTime-clip.startTime}:clip,width,height,false,lutFile)}[${v}]`);
       filters.push(`[${layer}][${v}]overlay=eof_action=pass:repeatlast=0:enable='gte(t,${clip.startTime})*lt(t,${clip.startTime + clip.duration})'[${next}]`); layer = next;
     }
     if (audible) {
@@ -179,10 +187,6 @@ export async function exportMedia(body: any, options:{screenshot?:boolean}={}) {
     if (audioOnly) throw new InputError('Nessuna traccia audio attiva da esportare.');
     filters.push(`anullsrc=r=48000:cl=stereo,atrim=duration=${duration}[audio]`);
   }
-  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'taledit-export-'));
-  const fileName = `${options.screenshot?'TALEDIT_Screenshot':still?'TALEDIT_Immagine':'TALEDIT_Export'}_${resolution}_${randomUUID()}.${format}`;
-  const output = path.join(downloadsDir, fileName);
-  try {
     if (!audioOnly) {
       const subtitles: SubtitleItem[] = body.clips.some((c:TimelineClip)=>c.type==='text')?timelineSubtitles(clips):body.subtitles || [];
       if (!Array.isArray(subtitles) || subtitles.length > 2000) throw new InputError('Sottotitoli non validi.');

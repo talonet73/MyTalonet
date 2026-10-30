@@ -17,7 +17,7 @@ Se compare un blocco di sicurezza di Windows, controlla provenienza e messaggio 
 
 Il primo file usa il programma di installazione di Windows per Node.js LTS, Python 3.12, FFmpeg e i componenti Microsoft necessari. Rimangono attive le verifiche normali delle fonti e dei pacchetti. Il secondo installa le versioni dell’app conservate nel progetto, usa PyAV 16.1.0 e salva il modello vocale nella cartella personale di Windows. Prepara anche BG Remover con un ambiente separato e un modello gratuito da circa 4,6 MB. Non serve un abbonamento a servizi di riconoscimento vocale.
 
-L’app e stata avviata e verificata realmente nel browser dell’ambiente Linux di sviluppo, con 77 test principali e 25 prove browser superate. Non e disponibile una macchina Windows in questo ambiente: la procedura di installazione Windows e predisposta, ma non e stata eseguita su Windows. Un eventuale errore specifico di quel sistema va verificato sulla macchina interessata.
+L’app e stata avviata e verificata realmente nel browser dell’ambiente Linux di sviluppo, con 86 test principali e 27 prove browser superate. Non e disponibile una macchina Windows in questo ambiente: la procedura di installazione Windows e predisposta, ma non e stata eseguita su Windows. Un eventuale errore specifico di quel sistema va verificato sulla macchina interessata.
 
 YouTube diretto rimane soggetto alle restrizioni di rete. Il pulsante **Carica video locale**, presente nella finestra YouTube, consente di importare un file gia sul tuo computer. Nessun blocco viene aggirato.
 
@@ -33,3 +33,7 @@ Con **2-AVVIA-TALEDIT.cmd**, Screenshot salva automaticamente un PNG nella carte
 ## Aprire il mixer audio
 
 Premi **AUDIO**, in verde in basso. Trovi le sole piste audio e una colonna di manopole per ogni pista; **MASTER** regola tutto il suono insieme. Premi il triangolo per ascoltare, trascina le manopole verso l’alto o il basso e fai doppio clic per riportarle al valore iniziale. Puoi anche scrivere il valore sotto la manopola. **FX** confronta l’audio con e senza le regolazioni, **S** ascolta una pista da sola e il simbolo dell’altoparlante la silenzia. Scorri per raggiungere gli altri controlli o le altre piste. Premi **VIDEO**, in blu, per tornare al montaggio. **Salva** conserva anche il mixer; **Esporta** applica le regolazioni al file finale.
+
+## Correggere i colori
+
+Premi **COLOR**, in rosso in basso, poi scegli il video o l’immagine nel menu **Clip da correggere**. In alto confronti **Originale** e **Corretto**. Sotto, **Ruote** regola i colori delle ombre, dei mezzitoni e delle luci; **Primarie** contiene luminosità, contrasto e gli altri controlli; **Curve** permette correzioni più precise. Puoi trascinare le manopole oppure scrivere il numero sotto; un doppio clic ripristina il singolo valore. A destra i quattro diagrammi aiutano a controllare luce e colore. **Bypass** permette il confronto senza perdere le impostazioni, **Reset** azzera la correzione della clip. Salva il progetto per conservarla; Esporta la applica al risultato finale.

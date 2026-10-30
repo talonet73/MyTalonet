@@ -19,7 +19,7 @@ export const ADJUSTMENTS = [
   { key:'sharpness', label:'Nitidezza' },
 ] as const;
 export type Adjustments = Partial<Record<typeof ADJUSTMENTS[number]['key'], number>>;
-export interface VisualSettings { effects?: VisualEffect[]; adjustments?: Adjustments; fadeIn?: number; fadeOut?: number; duration: number; transparency?: number; intensity?: number; speed?: number; offset?: number; effectSpan?: number; speedLevel?:number }
+export interface VisualSettings { colorGrade?:import('./colorGrade').ColorGrade; effects?: VisualEffect[]; adjustments?: Adjustments; fadeIn?: number; fadeOut?: number; duration: number; transparency?: number; intensity?: number; speed?: number; offset?: number; effectSpan?: number; speedLevel?:number }
 export const effectAmount = (settings: VisualSettings) => (settings.intensity ?? 5)/5;
 export function colorSettings(settings: VisualSettings) {
   const a = { brightness:0, contrast:0, saturation:0, exposure:0, temperature:0, tint:0, sharpness:0, ...settings.adjustments };

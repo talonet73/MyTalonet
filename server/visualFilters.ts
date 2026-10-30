@@ -1,7 +1,7 @@
 import {clipRate} from '../src/services/clipSpeed';
 import type { TimelineClip } from '../src/types/editor';
 import { colorExpressions, colorSettings, effectAmount } from '../src/services/visualSettings';
-export function visualFilters(clip: TimelineClip, width: number, height: number, global=false) {
+export function visualFilters(clip: TimelineClip, width: number, height: number, global=false,lutFile?:string) {
   const parts=global?['fps=25']:[`setpts=(PTS-STARTPTS)/${clip.type==='video'?clipRate(clip):1}`,'fps=25'];
   const amount=effectAmount(clip);
   const colors=colorExpressions(clip);
@@ -9,7 +9,9 @@ export function visualFilters(clip: TimelineClip, width: number, height: number,
     const a=colorSettings(clip),gain=2**(a.exposure/50)*(1+a.contrast/100),o=(.5-.5*(1+a.contrast/100)+a.brightness/400)*255,w=a.temperature/100*38.25,t=a.tint/100*12.75;
     parts.push('format=rgb24',`lutrgb=r='clip(val*${gain}+${o+w+t},0,255)':g='clip(val*${gain}+${o-2*t},0,255)':b='clip(val*${gain}+${o-w+t},0,255)'`,`hue=s=${1+a.saturation/100}`);
   } else if(colors)parts.push('format=gbrap',`geq=r='${colors[0]}':g='${colors[1]}':b='${colors[2]}':a='alpha(X,Y)'`);
-  if(clip.adjustments?.sharpness)parts.push(`unsharp=3:3:${clip.adjustments.sharpness/100*1.5}`);
+  if(lutFile)parts.push(`lut3d=file='${lutFile}':interp=trilinear`);
+  const sharpness=Math.min(100,(clip.adjustments?.sharpness||0)+(clip.colorGrade?.bypass?0:clip.colorGrade?.sharpness||0));
+  if(sharpness)parts.push(`unsharp=3:3:${sharpness/100*1.5}`);
   parts.push(`scale=${width}:${height}:force_original_aspect_ratio=decrease`,'format=rgba',`pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black@0`,'setsar=1');
   const effects=clip.effects || [];
   if(effects.includes('blur'))parts.push(`gblur=sigma=${height/90*amount}`);
