@@ -1,3 +1,5 @@
+import {PenMaskControls,PenMaskOverlay} from './PenMaskEditor';
+import type {PenMask} from '../services/penMask';
 import React, { useRef, useEffect, useState } from 'react';
 import {
   Menu,
@@ -13,6 +15,7 @@ import { playbackEngine } from '../services/playbackEngine';
 import { TimelineClip, SubtitleItem } from '../types/editor';
 
 interface PlayerPanelProps {
+  penActive?:boolean;selectedClip?:TimelineClip|null;onUpdateMask?:(m:PenMask|undefined)=>void;
   tracks?: import('../types/editor').Track[];
   audioMaster?:import('../services/audioMixer').AudioSettings;
   currentTime: number;
@@ -29,7 +32,7 @@ interface PlayerPanelProps {
 }
 
 export const PlayerPanel: React.FC<PlayerPanelProps> = ({
-  tracks=[],audioMaster,
+  tracks=[],audioMaster,penActive=false,selectedClip,onUpdateMask,
   currentTime,
   totalDuration,
   isPlaying,
@@ -67,7 +70,7 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
       id: c.id,trackId:c.trackId,
       name: c.name,speedLevel:c.speedLevel,
       transparency: c.transparency,
-      effects: c.effects, adjustments: c.adjustments,colorGrade:c.colorGrade,
+      effects: c.effects, adjustments: c.adjustments,colorGrade:c.colorGrade,mask:c.mask,
       volumeDb: c.volumeDb,
       fadeIn:c.fadeIn,fadeOut:c.fadeOut,
       layer: clips.indexOf(c),
@@ -112,7 +115,7 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
       id: c.id,trackId:c.trackId,
       name: c.name,speedLevel:c.speedLevel,
       transparency: c.transparency,
-      effects: c.effects, adjustments: c.adjustments,colorGrade:c.colorGrade,
+      effects: c.effects, adjustments: c.adjustments,colorGrade:c.colorGrade,mask:c.mask,
       volumeDb: c.volumeDb,
       fadeIn:c.fadeIn,fadeOut:c.fadeOut,
       layer: clips.indexOf(c),
@@ -183,18 +186,20 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
       </div>
 
       {playerError && <button role="alert" onClick={()=>setPlayerError('')} className="text-xs text-rose-300 p-2">{playerError}</button>}
+      {penActive&&<>{selectedClip&&['video','image'].includes(selectedClip.type)&&onUpdateMask?<PenMaskControls mask={selectedClip.mask} onUpdate={onUpdateMask}/>:<p className="p-2 text-xs text-amber-200">Seleziona una clip video o immagine prima di usare la penna.</p>}</>}
       {/* Video Screen Area */}
       <div ref={screenRef} data-testid="player-screen" className="flex-1 min-h-0 min-w-0 flex items-center justify-center p-2 bg-[#0a0d14] relative overflow-hidden">
         <div data-testid="player-frame" style={{width:fittedWidth,height:fittedWidth/ratio}} className="relative shrink-0 flex items-center justify-center shadow-2xl rounded border border-[#1e293b] bg-black overflow-hidden">
           <canvas data-testid="player-canvas"
             ref={canvasRef}
-            width={aspectRatio === '9:16' ? 360 : aspectRatio === '1:1' ? 360 : aspectRatio === '4:3' ? 480 : 640}
-            height={aspectRatio === '9:16' ? 640 : 360}
+            width={penActive?(aspectRatio==='9:16'?405:aspectRatio==='1:1'?720:aspectRatio==='4:3'?960:1280):aspectRatio === '9:16' ? 360 : aspectRatio === '1:1' ? 360 : aspectRatio === '4:3' ? 480 : 640}
+            height={penActive?720:aspectRatio === '9:16' ? 640 : 360}
             className="w-full h-full object-contain"
           />
 
+          {penActive&&selectedClip&&['video','image'].includes(selectedClip.type)&&onUpdateMask&&<PenMaskOverlay mask={selectedClip.mask} onUpdate={onUpdateMask}/>}
           {/* Quick Play Overlay Button if Paused */}
-          {!isPlaying && (
+          {!isPlaying && !penActive && (
             <button
               aria-label={isPlaying ? 'Pausa anteprima' : 'Riproduci anteprima'}
               onClick={onTogglePlay}

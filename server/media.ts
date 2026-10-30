@@ -1,3 +1,6 @@
+import {maskPng} from './maskPng';
+import {validateMask} from '../src/services/penMask';
+import {karaokeLayout,validateWords,validateCaptionClip} from '../src/services/karaoke';
 import {gradeCube,hasGrade,validateGrade} from '../src/services/colorGrade';
 import {audioFilters,validateAudio} from '../src/services/audioMixer';
 import {clipRate,sourceTime,tempoFilters,validSpeedLevel} from '../src/services/clipSpeed';
@@ -69,7 +72,7 @@ export async function exportMedia(body: any, options:{screenshot?:boolean}={}) {
   try{validateAudio(body.audioMaster);for(const t of body.tracks||[])validateAudio(t.audio);}catch(error){throw new InputError((error as Error).message);}
   const clips = activeClips(body.clips, body.tracks);
   for (const clip of clips) {
-    try{validateGrade(clip.colorGrade);}catch(error){throw new InputError((error as Error).message);}
+    try{validateGrade(clip.colorGrade);validateMask(clip.mask);validateCaptionClip(clip);}catch(error){throw new InputError((error as Error).message);}
     if(!validSpeedLevel(clip.speedLevel))throw new InputError('Velocità clip non valida: da -5 a +5.');
     number(clip.startTime, 0, 0, 86400); number(clip.duration, 0, 0.001, 86400); number(clip.offset, 0, 0, 86400);
     number(clip.intensity,5,0,10);number(clip.speed,5,0,10);number(clip.effectSpan,clip.duration,.001,86400);
@@ -141,7 +144,9 @@ export async function exportMedia(body: any, options:{screenshot?:boolean}={}) {
       if(lutFile)await fs.writeFile(path.join(temp,lutFile),gradeCube(clip.colorGrade!));
       const v = `v${idx}`, next = `layer${idx}`;
       const alpha = (clip.transparency ?? 100) / 100;
-      filters.push(`[${idx}:v]${visualFilters(still?{...clip,startTime:frameTime,fadeIn:0,fadeOut:0,transparency:clipAlpha(clip,frameTime-clip.startTime)*100,animationOffset:frameTime-clip.startTime}:clip,width,height,false,lutFile)}[${v}]`);
+      const hasMask=clip.mask?.closed&&clip.mask.enabled!==false;
+      filters.push(`[${idx}:v]${visualFilters(still?{...clip,startTime:frameTime,fadeIn:0,fadeOut:0,transparency:clipAlpha(clip,frameTime-clip.startTime)*100,animationOffset:frameTime-clip.startTime}:clip,width,height,false,lutFile)}[${hasMask?v+'raw':v}]`);
+      if(hasMask){const mi=input++;await fs.writeFile(path.join(temp,`mask-${idx}.png`),maskPng(clip.mask!,width,height));args.push('-loop','1','-framerate','25','-t',String(still ? .04 : clip.duration),'-i',path.join(temp,`mask-${idx}.png`));filters.push(`[${v}raw]split[${v}color][${v}alpha];[${v}alpha]alphaextract[${v}old];[${mi}:v]format=gray,setpts=PTS+${still?frameTime:clip.startTime}/TB[${v}mask];[${v}old][${v}mask]blend=all_mode=multiply[${v}new];[${v}color][${v}new]alphamerge[${v}]`);}
       filters.push(`[${layer}][${v}]overlay=eof_action=pass:repeatlast=0:enable='gte(t,${clip.startTime})*lt(t,${clip.startTime + clip.duration})'[${next}]`); layer = next;
     }
     if (audible) {
@@ -195,18 +200,30 @@ export async function exportMedia(body: any, options:{screenshot?:boolean}={}) {
         const candidates=[path.join(process.env.WINDIR || 'C:\\Windows','Fonts','arial.ttf'),'/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf','/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf','/System/Library/Fonts/Supplemental/Arial.ttf'];
         for(const candidate of candidates) {try {await fs.copyFile(candidate,path.join(temp,'font.ttf'));font=":fontfile='font.ttf'";break;}catch{/* Try the next platform font. */}}
       }
+      let monoFont=font;
+      if(subtitles.some(s=>s.style==='karaoke')){for(const candidate of [path.join(process.env.WINDIR||'C:\\Windows','Fonts','consolab.ttf'),'/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf','/usr/share/fonts/truetype/liberation2/LiberationMono-Bold.ttf','/System/Library/Fonts/Menlo.ttc']){try{await fs.copyFile(candidate,path.join(temp,'mono.ttf'));monoFont=":fontfile='mono.ttf'";break;}catch{}}}
       for (const [i, sub] of subtitles.entries()) {
         if (typeof sub.text !== 'string' || sub.text.length > 10000) throw new InputError('Testo sottotitolo non valido.');
         const start = number(sub.startTime, 0, 0, 86400), end = number(sub.endTime, 0, start, 86400);
         const opacity=number(sub.transparency,100,0,100)/100,fadeIn=number(sub.fadeIn,0,0,600),fadeOut=number(sub.fadeOut,0,0,600),row=Math.floor(number(sub.row,0,0,99));
         const alpha=`${opacity}*max(0,min(1,min(${fadeIn?`(t-${start})/${fadeIn}`:'1'},${fadeOut?`(${end}-t)/${fadeOut}`:'1'})))`;
+        try{validateWords(sub);}catch(error){throw new InputError((error as Error).message);}
+        if(sub.style==='karaoke'&&sub.words?.length){
+          const layout=karaokeLayout(sub,width,height);let current=layer;
+          for(const [wi,word] of layout.words.entries()){
+            const file=`kw${i}_${wi}.txt`;await fs.writeFile(path.join(temp,file),word.text);const tag=`kt${i}_${wi}`;filters.push(`[${current}]drawtext=textfile='${file}'${monoFont}:expansion=none:fontsize=${layout.font}:fontcolor=white:x=${word.x}:y=${word.y}:alpha='${alpha}':enable='gte(t,${start})*lt(t,${end})'[${tag}]`);current=tag;
+            const startWord=Math.max(start,word.startTime),endWord=Math.min(end,word.endTime);if(endWord>startWord){const active=`ka${i}_${wi}`;filters.push(`[${current}]drawtext=textfile='${file}'${monoFont}:expansion=none:fontsize=${layout.font}:fontcolor=white:box=1:boxcolor=0x087f8c@0.95:boxborderw=4:x=${word.x}:y=${word.y}:alpha='${alpha}':enable='gte(t,${startWord})*lt(t,${endWord})'[${active}]`);current=active;}
+          }layer=current;continue;
+        }
         const textPath = path.join(temp, `${i}.txt`);
         await fs.writeFile(textPath, sub.text);
         const next = `sub${i}`;
         filters.push(`[${layer}]drawtext=textfile='${i}.txt'${font}:expansion=none:fontsize=${Math.round(height / 24)}:fontcolor=yellow:box=1:boxcolor=black@0.75:boxborderw=8:x=(w-text_w)/2:y=h-text_h-30-${row*Math.round(height/24)*2}:alpha='${alpha}':enable='gte(t,${start})*lt(t,${end})'[${next}]`); layer = next;
       }
     }
-    args.push('-filter_complex', filters.join(';'));
+    // Animated captions create many filters; keep them out of Windows' command-line limit.
+    const filterScript=path.join(temp,'filters.ffscript');await fs.writeFile(filterScript,filters.join(';'));
+    args.push('-filter_complex_script', filterScript);
     if(still) {
       const codec=({png:'png',jpg:'mjpeg',webp:'libwebp',bmp:'bmp',tiff:'tiff',gif:'gif'} as Record<string,string>)[format];
       args.push('-map',`[${layer}]`,'-frames:v','1','-fps_mode','passthrough','-c:v',codec!,'-threads','2','-an');

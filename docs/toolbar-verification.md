@@ -50,9 +50,9 @@ La regressione conserva le prove precedenti di container MP4/MOV/AVI/MP3/WAV, to
 ## Esiti e limiti
 
 - `npm run lint`: **PASS**, verifica TypeScript.
-- `npm test`: **PASS, 86/86**, test reali/di integrazione sui contenuti e sulle operazioni.
+- `npm test`: **PASS, 98/98**, test reali/di integrazione sui contenuti e sulle operazioni.
 - `npm run test:whisper`: **PASS**, parlato noto e silenzio reali.
-- `npm run test:e2e`: **PASS, 27/27** scenari Chromium, con numerose azioni e verifiche per ciascuno; il numero di scenari non è il numero di pulsanti.
+- `npm run test:e2e`: **PASS, 31/31** scenari Chromium, con numerose azioni e verifiche per ciascuno; il numero di scenari non è il numero di pulsanti.
 - Build di produzione eseguita dal runner browser e `git diff --check`: **PASS**.
 - `bash scripts/setup-bg.sh`: installazione ripetibile e modello U2NetP pronti. Dipendenze Python separate da Whisper; `pip check` senza conflitti.
 - Controllo di disponibilità dei pacchetti per Python 3.12 / Windows a 64 bit effettuato con il risolutore pip; non equivale all’esecuzione su Windows.
@@ -74,3 +74,5 @@ Aggiornamento del 29 ottobre 2026: [velocità, Screenshot e livelli](speed-layer
 Aggiornamento del 30 ottobre 2026: [sezioni VIDEO/AUDIO e mixer](audio-mixer-verification.md).
 
 Aggiornamento COLOR del 30 ottobre 2026: [controlli, monitor e scopes](color-verification.md).
+
+Aggiornamento strumenti intelligenti del 30 ottobre 2026: [ricerca GitHub, tagli assistiti, parole evidenziate, maschere e fullscreen](github-ai-research.md).

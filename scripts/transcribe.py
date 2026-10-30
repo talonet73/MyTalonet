@@ -12,8 +12,8 @@ def main():
         raise RuntimeError('Modello Whisper non installato. Esegui scripts/setup-whisper.sh con accesso a Hugging Face.')
     model = WhisperModel(model_path, device='cpu', compute_type='int8', cpu_threads=4, local_files_only=True)
     language = data.get('language')
-    segments, info = model.transcribe(data['file'], language=language, beam_size=5, vad_filter=True, vad_parameters={'speech_pad_ms': 100}, condition_on_previous_text=False)
-    result = [dict(startTime=s.start, endTime=s.end, text=s.text.strip()) for s in segments if s.text.strip()]
+    segments, info = model.transcribe(data['file'], language=language, beam_size=5, vad_filter=True, vad_parameters={'speech_pad_ms': 100}, condition_on_previous_text=False, word_timestamps=True)
+    result = [dict(startTime=s.start, endTime=s.end, text=s.text.strip(), words=[dict(text=w.word.strip(), startTime=w.start, endTime=w.end, probability=w.probability) for w in (s.words or []) if w.word.strip() and w.end > w.start]) for s in segments if s.text.strip()]
     if data.get('bilingual') and info.language != 'en':
         translated, _ = model.transcribe(data['file'], language=language, task='translate', beam_size=5, vad_filter=True, vad_parameters={'speech_pad_ms': 100}, condition_on_previous_text=False)
         translated = list(translated)

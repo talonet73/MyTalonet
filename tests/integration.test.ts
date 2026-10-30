@@ -374,3 +374,26 @@ test('COLOR LUT preserves image transparency when composited over another image'
   const sample=async(x:number,y:number)=>{const {stdout}=await promisify(execFile)('ffmpeg',['-v','error','-i',result.file,'-vf',`crop=1:1:${x}:${y}`,'-frames:v','1','-pix_fmt','rgb24','-f','rawvideo','pipe:1'],{encoding:'buffer'});return [...stdout];};
   const corner=await sample(0,0),center=await sample(640,360);assert.ok(corner[1]>240&&corner[0]<10,`${corner}`);assert.ok(center[0]>110&&center[0]<140&&center[1]<10,`${center}`);
 });
+
+test('pen masks export actual matte, inverted matte, feather and video without losing soundtrack',async()=>{
+  const mask={closed:true,points:[{x:.25,y:.25},{x:.75,y:.25},{x:.75,y:.75},{x:.25,y:.75}]};
+  const result=await exported({clips:[clip(video,{mask})]});const {stdout}=await promisify(execFile)('ffmpeg',['-v','error','-ss','0.4','-i',result.file,'-vf','scale=4:4','-frames:v','1','-pix_fmt','rgb24','-f','rawvideo','pipe:1'],{encoding:'buffer'});assert.ok(stdout[0]<25);const center=await promisify(execFile)('ffmpeg',['-v','error','-ss','0.4','-i',result.file,'-vf','format=rgb24,crop=1:1:640:360','-frames:v','1','-pix_fmt','rgb24','-f','rawvideo','pipe:1'],{encoding:'buffer'});assert.ok(center.stdout[0]>240,JSON.stringify([...center.stdout]));assert.ok(rms(await samples(result.file))>.04);
+  const inverted=await exported({format:'png',clips:[clip(image,{mask:{...mask,inverted:true,feather:20}})]});const corner=await promisify(execFile)('ffmpeg',['-v','error','-i',inverted.file,'-vf','crop=1:1:0:0','-frames:v','1','-pix_fmt','rgb24','-f','rawvideo','pipe:1'],{encoding:'buffer'});assert.ok(corner.stdout[1]>230);
+  const invalid=await api('/api/export',{clips:[clip(video,{mask:{...mask,feather:100}})],durationSec:2});assert.equal(invalid.status,400);
+});
+test('karaoke export moves actual teal highlight with word timestamps and respects hidden text',async()=>{
+  const text=clip(image,{id:'txt',type:'text',text:'ciao mondo',trackId:'text',captionStyle:'karaoke',captionWords:[{text:'ciao',startTime:0,endTime:.8},{text:'mondo',startTime:1,endTime:1.8}],mediaUrl:undefined});
+  const result=await exported({clips:[clip(video),text]});
+  async function tealAt(t:number,file=result.file){const {stdout}=await promisify(execFile)('ffmpeg',['-v','error','-ss',String(t),'-i',file,'-frames:v','1','-pix_fmt','rgb24','-f','rawvideo','pipe:1'],{encoding:'buffer',maxBuffer:5*1024*1024});let sum=0,count=0;for(let i=0;i<stdout.length;i+=3)if(stdout[i]<50&&stdout[i+1]>90&&stdout[i+1]<175&&stdout[i+2]>95&&stdout[i+2]<185){sum+=(i/3)%1280;count++;}return {x:sum/Math.max(1,count),count};}
+  const a=await tealAt(.4),b=await tealAt(1.4);assert.ok(a.count>200&&b.count>200);assert.ok(b.x-a.x>50,JSON.stringify({a,b}));
+  const hidden=await exported({clips:[clip(video),{...text,transparency:0}]});assert.ok((await pixel(hidden.file,.4))[0]>240);assert.equal((await tealAt(.4,hidden.file)).count,0);
+});
+test('real smart-cut analysis finds known inserted silence and returns real word timings',async()=>{
+  const speech=await upload(path.resolve('tests/fixtures/jfk.wav'));
+  const start=await api('/api/smart-cut',{clips:[clip(speech,{id:'speech',type:'audio',startTime:1,duration:6})],durationSec:8,tolerance:.5,language:'English'});assert.equal(start.status,202,JSON.stringify(start.data));let job:any;
+  for(let i=0;i<180;i++){job=(await api(`/api/captions/${start.data.jobId}`)).data;if(job.status!=='running')break;await new Promise(r=>setTimeout(r,300));}
+  assert.equal(job.status,'complete',JSON.stringify(job));assert.ok(job.subtitles.flatMap((s:any)=>s.words||[]).length>4);assert.ok(job.candidates.some((r:any)=>r.reason==='pause'&&r.start<.3&&r.end>.7));assert.ok(job.candidates.some((r:any)=>r.reason==='pause'&&r.end>7.5));
+  assert.equal((await api('/api/smart-cut',{tolerance:.2})).status,400);
+});
+
+test('long karaoke timelines export through a filter script with source audio intact',async()=>{const texts=Array.from({length:30},(_,i)=>clip(image,{id:`text-${i}`,type:'text',trackId:'text',startTime:i/15,duration:1/15,text:'uno due tre quattro cinque',captionStyle:'karaoke',captionWords:['uno','due','tre','quattro','cinque'].map((text,j)=>({text,startTime:j/75,endTime:(j+1)/75})),mediaUrl:undefined}));const out=await exported({clips:[clip(video),...texts]});assert.ok(out.info.streams.some((s:any)=>s.codec_type==='video'));assert.ok(rms(await samples(out.file))>.04);});

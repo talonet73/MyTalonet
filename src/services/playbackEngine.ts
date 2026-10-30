@@ -1,3 +1,6 @@
+import {maskAlpha} from './penMask';
+import {karaokeLayout} from './karaoke';
+import type {TimedWord} from '../types/editor';
 import {applyGrade,hasGrade} from './colorGrade';
 import {LiveAudioMixer} from './liveAudioMixer';
 import type {AudioSettings} from './audioMixer';
@@ -60,6 +63,7 @@ export interface ImageClipData extends Partial<VisualSettings> {
 }
 
 export interface SubtitleData {
+  words?:TimedWord[];style?:'classic'|'karaoke';
   row?:number;transparency?:number;fadeIn?:number;fadeOut?:number;
   text: string;
   startTime: number;
@@ -206,7 +210,13 @@ export class PlaybackEngine {
       ctx.globalAlpha=clipAlpha(settings,elapsed);
       if(settings.effects?.includes('blur'))ctx.filter=`blur(${height/90*effectAmount(settings)}px)`;
       ctx.translate(width/2-motion.x*width,height/2-motion.y*height);ctx.scale(motion.zoom,motion.zoom);
-      ctx.drawImage(frame,-width/2,-height/2);ctx.restore();
+      if(settings.mask?.closed&&settings.mask.enabled!==false){
+        const masked=document.createElement('canvas');masked.width=width;masked.height=height;const mc=masked.getContext('2d')!;
+        const alpha=maskAlpha(settings.mask,width,height),maskCanvas=document.createElement('canvas');maskCanvas.width=width;maskCanvas.height=height;const ma=maskCanvas.getContext('2d')!,pixels=ma.createImageData(width,height);for(let i=0;i<alpha.length;i++){pixels.data[i*4+3]=alpha[i];}ma.putImageData(pixels,0,0);
+        // Mask uses final stage coordinates, independent of a clip's zoom/shake transform.
+        mc.save();mc.translate(width/2-motion.x*width,height/2-motion.y*height);mc.scale(motion.zoom,motion.zoom);mc.filter=ctx.filter;mc.drawImage(frame,-width/2,-height/2);mc.restore();mc.globalCompositeOperation='destination-in';mc.drawImage(maskCanvas,0,0);
+        ctx.restore();ctx.save();ctx.globalAlpha=clipAlpha(settings,elapsed);ctx.drawImage(masked,0,0);ctx.restore();
+      }else{ctx.drawImage(frame,-width/2,-height/2);ctx.restore();}
     }
     for(const effect of global) {
       if(effect.intensity===0)continue;
@@ -230,6 +240,7 @@ export class PlaybackEngine {
     }
     for(const subtitle of subtitles.filter(s=>time>=s.startTime && time<s.endTime)) {
       ctx.save();ctx.globalAlpha=clipAlpha({...subtitle,duration:subtitle.endTime-subtitle.startTime},time-subtitle.startTime);
+      if(subtitle.style==='karaoke'&&subtitle.words?.length){const layout=karaokeLayout({...subtitle,id:'preview'},width,height);ctx.font=`bold ${layout.font}px monospace`;ctx.textAlign='left';ctx.textBaseline='top';for(const word of layout.words){if(time>=word.startTime&&time<word.endTime){ctx.fillStyle='#087f8c';ctx.fillRect(word.x-4,word.y-4,ctx.measureText(word.text).width+8,layout.font+8);}ctx.fillStyle='white';ctx.fillText(word.text,word.x,word.y);}ctx.restore();continue;}
       const font=Math.round(height/24),lines=subtitle.text.split('\n');
       ctx.font=`bold ${font}px sans-serif`;ctx.textAlign='center';
       const w=Math.min(width-20,Math.max(...lines.map(line=>ctx.measureText(line).width))+16),h=lines.length*(font+4),row=(subtitle.row||0)*font*2;

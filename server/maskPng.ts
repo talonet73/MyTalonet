@@ -1,0 +1,5 @@
+import {deflateSync} from 'node:zlib';
+import {maskAlpha,type PenMask} from '../src/services/penMask';
+function crc32(buffer:Buffer){let crc=0xffffffff;for(const n of buffer){crc^=n;for(let i=0;i<8;i++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}return (crc^0xffffffff)>>>0;}
+function chunk(name:string,data:Buffer){const type=Buffer.from(name),len=Buffer.alloc(4),crc=Buffer.alloc(4);len.writeUInt32BE(data.length);crc.writeUInt32BE(crc32(Buffer.concat([type,data])));return Buffer.concat([len,type,data,crc]);}
+export function maskPng(mask:PenMask,width:number,height:number){const pixels=maskAlpha(mask,width,height),header=Buffer.alloc(13);header.writeUInt32BE(width);header.writeUInt32BE(height,4);header[8]=8;header[9]=0;const rows=Buffer.alloc((width+1)*height);for(let y=0;y<height;y++)Buffer.from(pixels.buffer,pixels.byteOffset+y*width,width).copy(rows,y*(width+1)+1);return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',header),chunk('IDAT',deflateSync(rows)),chunk('IEND',Buffer.alloc(0))]);}

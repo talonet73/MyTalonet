@@ -1,3 +1,8 @@
+import {validateCaptionClip} from './services/karaoke';
+import {FullscreenTools} from './components/FullscreenTools';
+import {SmartCutPanel} from './components/SmartCutPanel';
+import {rippleRemove} from './services/smartCut';
+import {validateMask} from './services/penMask';
 import {ColorPanel} from './components/ColorPanel';
 import {validateGrade} from './services/colorGrade';
 import {AudioMixer} from './components/AudioMixer';
@@ -115,6 +120,7 @@ export default function App() {
   const [subtitles, setSubtitles] = useState<SubtitleItem[]>(INITIAL_SUBTITLES);
 
   // Tabs & Toolbars
+  const [animatedCaptions,setAnimatedCaptions]=useState(true);
   const [activeTab, setActiveTab] = useState<string>('');
   const [isMicActive, setIsMicActive] = useState<boolean>(false);
 
@@ -162,7 +168,8 @@ export default function App() {
 
   const tracksRef = useRef<Track[]>(tracks);
   useEffect(() => { tracksRef.current=tracks; },[tracks]);
-  const historyRef = useRef<{clips:TimelineClip[];tracks:Track[];audioMaster?:AudioSettings}[]>([{clips:INITIAL_CLIPS,tracks:INITIAL_TRACKS}]);
+  const markersRef=useRef(markers);markersRef.current=markers;const subtitlesRef=useRef(subtitles);subtitlesRef.current=subtitles;
+  const historyRef = useRef<{clips:TimelineClip[];tracks:Track[];audioMaster?:AudioSettings;markers?:TimelineMarker[];subtitles?:SubtitleItem[]}[]>([{clips:INITIAL_CLIPS,tracks:INITIAL_TRACKS}]);
   const historyIndexRef = useRef<number>(0);
   const [historyCount, setHistoryCount] = useState<number>(0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -178,8 +185,8 @@ export default function App() {
   ]);
 
   // Push new move to history (maintains up to 10 moves)
-  const pushHistory = useCallback((newClips: TimelineClip[], newTracks=tracksRef.current,newMaster=audioMasterRef.current) => {
-    const snapshot={clips:newClips,tracks:newTracks,audioMaster:newMaster};
+  const pushHistory = useCallback((newClips: TimelineClip[], newTracks=tracksRef.current,newMaster=audioMasterRef.current,metadata={markers:markersRef.current,subtitles:subtitlesRef.current}) => {
+    const snapshot={clips:newClips,tracks:newTracks,audioMaster:newMaster,...metadata};
     const currentIdx = historyIndexRef.current;
     const sliced = historyRef.current.slice(0, currentIdx + 1);
 
@@ -222,7 +229,7 @@ export default function App() {
       const snapshot = historyRef.current[prevIdx];
       const targetClips = snapshot?.clips;
       if (targetClips) {
-        setTracks(snapshot.tracks);tracksRef.current=snapshot.tracks;setAudioMaster(snapshot.audioMaster||{});
+        setTracks(snapshot.tracks);tracksRef.current=snapshot.tracks;setAudioMaster(snapshot.audioMaster||{});if(snapshot.markers)setMarkers(snapshot.markers);if(snapshot.subtitles)setSubtitles(snapshot.subtitles);
         setSelectedClipId(id=>targetClips.some(c=>c.id===id)?id:null);
         setSelectedClipIds(ids=>ids.filter(id=>targetClips.some(c=>c.id===id)));
         setClips(targetClips);
@@ -245,7 +252,7 @@ export default function App() {
       const snapshot = historyRef.current[nextIdx];
       const targetClips = snapshot?.clips;
       if (targetClips) {
-        setTracks(snapshot.tracks);tracksRef.current=snapshot.tracks;setAudioMaster(snapshot.audioMaster||{});
+        setTracks(snapshot.tracks);tracksRef.current=snapshot.tracks;setAudioMaster(snapshot.audioMaster||{});if(snapshot.markers)setMarkers(snapshot.markers);if(snapshot.subtitles)setSubtitles(snapshot.subtitles);
         setSelectedClipId(id=>targetClips.some(c=>c.id===id)?id:null);
         setSelectedClipIds(ids=>ids.filter(id=>targetClips.some(c=>c.id===id)));
         setClips(targetClips);
@@ -382,7 +389,7 @@ export default function App() {
         const content = evt.target?.result as string;
         const data = JSON.parse(content);
         if (data.appName !== 'TALEDIT' || !Array.isArray(data.tracks) || !Array.isArray(data.clips) || data.clips.some((c: any) => !c.id || !['video','audio','image','effect','text'].includes(c.type) || !Number.isFinite(c.startTime) || c.startTime < 0 || !Number.isFinite(c.duration) || c.duration <= 0 || !validSpeedLevel(c.speedLevel))) throw new Error('Progetto TALEDIT non valido.');
-        validateAudio(data.audioMaster);for(const t of data.tracks)validateAudio(t.audio);for(const c of data.clips)validateGrade(c.colorGrade);
+        validateAudio(data.audioMaster);for(const t of data.tracks)validateAudio(t.audio);for(const c of data.clips){validateGrade(c.colorGrade);validateMask(c.mask);validateCaptionClip(c);}
         setAudioMaster(data.audioMaster||{});
         let normalized=normalizeTrackAssignments(data.clips,data.tracks);
         if(!normalized.tracks.some(t=>t.type==='text'))normalized.tracks.push(textTrack());
@@ -391,7 +398,7 @@ export default function App() {
         if (data.tracks) setTracks(data.tracks);
         if (data.clips) {
           setClips(data.clips);
-          pushHistory(data.clips,data.tracks || tracksRef.current,data.audioMaster||{});
+          pushHistory(data.clips,data.tracks || tracksRef.current,data.audioMaster||{},{markers:data.markers||[],subtitles:data.subtitles||[]});
         }
         if (data.markers) setMarkers(data.markers);
         if (data.subtitles) setSubtitles(data.subtitles);
@@ -761,6 +768,7 @@ export default function App() {
         const asset=mediaAssets.find(a=>a.id===target.assetId);
         if(asset)updates={...updates,duration:Math.max(.04,Math.min(updates.duration,(asset.durationSec-(updates.offset ?? target.offset ?? 0))/clipRate(target)))};
       }
+      if(updates.text!==undefined&&target?.captionWords){const words=updates.text.trim().split(/\s+/);updates={...updates,captionWords:words.length===target.captionWords.length?target.captionWords.map((w,i)=>({...w,text:words[i]})):undefined,captionStyle:words.length===target.captionWords.length?target.captionStyle:'classic'};}
       const linkedUpdates = Object.fromEntries(Object.entries(updates).filter(([key]) => ['startTime', 'duration', 'offset'].includes(key)));
       const next = prev.map(c => c.id === clipId ? { ...c, ...updates } : target?.isLinked && target.linkedClipId === c.id ? { ...c, ...linkedUpdates, ...(updates.offset!==undefined?{offset:Math.max(0,Math.round(((c.offset||0)+updates.offset-(target.offset||0))*1e6)/1e6)}:{}) } : c);
       clipsRef.current = next;
@@ -875,7 +883,7 @@ export default function App() {
   };
 
   const handleUpdateSubtitle = (id: string, text: string) => {
-    setSubtitles(prev => prev.map(s => (s.id === id ? { ...s, text } : s)));
+    setSubtitles(prev => prev.map(s => {if(s.id!==id)return s;const tokens=text.trim().split(/\s+/),words=s.words&&tokens.length===s.words.length?s.words.map((w,i)=>({...w,text:tokens[i]})):undefined;return {...s,text,words};}));
   };
 
   const handleDeleteSubtitle = (id: string) => {
@@ -941,23 +949,24 @@ export default function App() {
         onAddMarker={() => handleAddMarker(currentTime)}
         markerCount={markers.length}
         activeTab={activeTab}
-        setActiveTab={tab => setActiveTab(prev => prev===tab ? '' : tab)}
+        setActiveTab={tab => {if(tab==='Pen Mask'){setWorkspace('video');setIsPlaying(false);const target=selectedClip&&['video','image'].includes(selectedClip.type)?selectedClip:clips.filter(c=>['video','image'].includes(c.type)&&currentTime>=c.startTime&&currentTime<c.startTime+c.duration).at(-1);if(target){setSelectedClipId(target.id);setSelectedClipIds([target.id]);if(currentTime<target.startTime||currentTime>=target.startTime+target.duration)setCurrentTime(target.startTime);}}setActiveTab(prev=>prev===tab?'':tab);}}
         onFullscreen={() => { const action = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); action.catch(() => setTrackConstraintWarning('Schermo intero non disponibile in questa finestra.')); }}
         isMicActive={isMicActive}
         onToggleMic={handleToggleMic}
       />
 
-      <BGRemoverPanel open={activeTab==='BG Remover'} selected={selectedClip} onClose={()=>setActiveTab('')} onComplete={(asset,original)=>{
+      <FullscreenTools><BGRemoverPanel open={activeTab==='BG Remover'} selected={selectedClip} onClose={()=>setActiveTab('')} onComplete={(asset,original)=>{
         setMediaAssets(prev=>[...prev,asset]);
         const next=clipsRef.current.map(c=>c.id===original.id && c.mediaUrl===original.mediaUrl && c.offset===original.offset && c.duration===original.duration?{...c,assetId:asset.id,mediaUrl:asset.fileUrl,mediaThumbnail:asset.thumbnailUrl,offset:0,name:asset.name}:c);
         if(next.some((c,i)=>c!==clipsRef.current[i])){setClips(next);clipsRef.current=next;pushHistory(next);}
       }}/>
-      {activeTab && activeTab!=='BG Remover' && <EditingToolsPanel tab={activeTab} selected={selectedClip} onClose={() => setActiveTab('')}
+      {activeTab==='AI Cut'&&<SmartCutPanel clips={clips} tracks={tracks} master={audioMaster} language={spokenLanguage} playing={isPlaying} onPlay={()=>setIsPlaying(p=>!p)} onClose={()=>setActiveTab('')} onSeek={setCurrentTime} onApply={ranges=>{try{const result=rippleRemove(clips,ranges),nextMarkers=markers.map(m=>({...m,time:result.mapTime(m.time)}));pushHistory(clips);setIsPlaying(false);setClips(result.clips);clipsRef.current=result.clips;pushHistory(result.clips,tracks,audioMaster,{markers:nextMarkers,subtitles:[]});setCurrentTime(result.mapTime(currentTime));setMarkers(nextMarkers);setSubtitles([]);setSelectedClipId(null);setSelectedClipIds([]);setActiveTab('');}catch(e){setTrackConstraintWarning((e as Error).message);}}}/>}
+      {activeTab && !['BG Remover','AI Cut','Pen Mask'].includes(activeTab) && <EditingToolsPanel tab={activeTab} selected={selectedClip} onClose={() => setActiveTab('')}
         onUpdate={updates => { if (!selectedClipId) return; const next=clips.map(c=>c.id===selectedClipId?{...c,...updates}:c);setClips(next);clipsRef.current=next;pushHistory(next); }}
         onAddEffect={type=>handleAddEffect(type)}
         onCrossDissolve={duration => { try { const next=applyCrossDissolve(clips,selectedClipId || '',duration);setClips(next);clipsRef.current=next;pushHistory(next); } catch(error) {setTrackConstraintWarning((error as Error).message);} }}>
-        <CaptionsPanel hasGeneratedCaptions={clips.some(c=>Boolean(c.captionId))} spokenLanguage={spokenLanguage} setSpokenLanguage={setSpokenLanguage} bilingualCaptions={bilingualCaptions} setBilingualCaptions={setBilingualCaptions} deleteCurrentCaptions={deleteCurrentCaptions} setDeleteCurrentCaptions={setDeleteCurrentCaptions} subtitles={subtitles} onGenerateCaptions={handleGenerateCaptions} onInsertCaptions={()=>{try{const next=captionClips(subtitles,clips,tracks,deleteCurrentCaptions,bilingualCaptions);setClips(next.clips);clipsRef.current=next.clips;setTracks(next.tracks);tracksRef.current=next.tracks;pushHistory(next.clips,next.tracks);}catch(error){setTrackConstraintWarning((error as Error).message);}}} onUpdateSubtitle={handleUpdateSubtitle} onDeleteSubtitle={handleDeleteSubtitle}/>
-      </EditingToolsPanel>}
+        <CaptionsPanel animated={animatedCaptions} onAnimatedChange={setAnimatedCaptions} hasGeneratedCaptions={clips.some(c=>Boolean(c.captionId))} spokenLanguage={spokenLanguage} setSpokenLanguage={setSpokenLanguage} bilingualCaptions={bilingualCaptions} setBilingualCaptions={setBilingualCaptions} deleteCurrentCaptions={deleteCurrentCaptions} setDeleteCurrentCaptions={setDeleteCurrentCaptions} subtitles={subtitles} onGenerateCaptions={handleGenerateCaptions} onInsertCaptions={()=>{try{const next=captionClips(subtitles,clips,tracks,deleteCurrentCaptions,bilingualCaptions,animatedCaptions);setClips(next.clips);clipsRef.current=next.clips;setTracks(next.tracks);tracksRef.current=next.tracks;pushHistory(next.clips,next.tracks);}catch(error){setTrackConstraintWarning((error as Error).message);}}} onUpdateSubtitle={handleUpdateSubtitle} onDeleteSubtitle={handleDeleteSubtitle}/>
+      </EditingToolsPanel>}</FullscreenTools>
 
       {/* 2. Main Middle Workspace: Header + 4 Resizable Panels */}
       <div style={{display:workspace==='video'?'flex':'none'}} className="flex-1 flex flex-col min-h-0 bg-[#0e121d]">
@@ -1016,6 +1025,7 @@ export default function App() {
               onSeek={t => setCurrentTime(t)}
               aspectRatio={aspectRatio}
               setAspectRatio={setAspectRatio}
+              penActive={activeTab==='Pen Mask'} selectedClip={selectedClip} onUpdateMask={mask=>{if(selectedClip){setIsPlaying(false);const next=clips.map(c=>c.id===selectedClip.id?{...c,mask}:c);setClips(next);clipsRef.current=next;pushHistory(next);}}}
               tracks={tracks} audioMaster={audioMaster}
               clips={activeTimelineClips(clips, tracks)}
               subtitles={timelineSubtitles(activeTimelineClips(clips,tracks))}

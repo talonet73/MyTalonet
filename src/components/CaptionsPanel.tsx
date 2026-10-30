@@ -3,6 +3,7 @@ import { SubtitleItem } from '../types/editor';
 import { Languages, Wand2, Trash2, CheckCircle2 } from 'lucide-react';
 
 interface CaptionsPanelProps {
+  animated?:boolean;onAnimatedChange?:(v:boolean)=>void;
   spokenLanguage: string;
   setSpokenLanguage: (lang: string) => void;
   bilingualCaptions: boolean;
@@ -18,6 +19,7 @@ interface CaptionsPanelProps {
 }
 
 export const CaptionsPanel: React.FC<CaptionsPanelProps> = ({
+  animated=false,onAnimatedChange,
   spokenLanguage,
   setSpokenLanguage,
   bilingualCaptions,
@@ -85,6 +87,7 @@ export const CaptionsPanel: React.FC<CaptionsPanelProps> = ({
           </button>
         </div>
 
+        {onAnimatedChange&&<label className="block text-xs my-2"><input type="checkbox" aria-label="Parola evidenziata ottanio" checked={animated} disabled={bilingualCaptions} onChange={e=>onAnimatedChange(e.target.checked)}/> Parola evidenziata ottanio (frasi brevi)<span className="block text-[10px] text-gray-400">Richiede i tempi parola di una nuova trascrizione. Se aggiungi/togli parole, il testo corretto usa lo stile classico. La traduzione usa lo stile classico.</span></label>}
         {/* Subtitles list or empty state */}
         <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
           {subtitles.length === 0 ? (

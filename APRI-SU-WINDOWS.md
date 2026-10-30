@@ -17,7 +17,7 @@ Se compare un blocco di sicurezza di Windows, controlla provenienza e messaggio 
 
 Il primo file usa il programma di installazione di Windows per Node.js LTS, Python 3.12, FFmpeg e i componenti Microsoft necessari. Rimangono attive le verifiche normali delle fonti e dei pacchetti. Il secondo installa le versioni dell’app conservate nel progetto, usa PyAV 16.1.0 e salva il modello vocale nella cartella personale di Windows. Prepara anche BG Remover con un ambiente separato e un modello gratuito da circa 4,6 MB. Non serve un abbonamento a servizi di riconoscimento vocale.
 
-L’app e stata avviata e verificata realmente nel browser dell’ambiente Linux di sviluppo, con 86 test principali e 27 prove browser superate. Non e disponibile una macchina Windows in questo ambiente: la procedura di installazione Windows e predisposta, ma non e stata eseguita su Windows. Un eventuale errore specifico di quel sistema va verificato sulla macchina interessata.
+L’app e stata avviata e verificata realmente nel browser dell’ambiente Linux di sviluppo, con 98 test principali e 31 prove browser superate. Non e disponibile una macchina Windows in questo ambiente: la procedura di installazione Windows e predisposta, ma non e stata eseguita su Windows. Un eventuale errore specifico di quel sistema va verificato sulla macchina interessata.
 
 YouTube diretto rimane soggetto alle restrizioni di rete. Il pulsante **Carica video locale**, presente nella finestra YouTube, consente di importare un file gia sul tuo computer. Nessun blocco viene aggirato.
 
@@ -37,3 +37,9 @@ Premi **AUDIO**, in verde in basso. Trovi le sole piste audio e una colonna di m
 ## Correggere i colori
 
 Premi **COLOR**, in rosso in basso, poi scegli il video o l’immagine nel menu **Clip da correggere**. In alto confronti **Originale** e **Corretto**. Sotto, **Ruote** regola i colori delle ombre, dei mezzitoni e delle luci; **Primarie** contiene luminosità, contrasto e gli altri controlli; **Curve** permette correzioni più precise. Puoi trascinare le manopole oppure scrivere il numero sotto; un doppio clic ripristina il singolo valore. A destra i quattro diagrammi aiutano a controllare luce e colore. **Bypass** permette il confronto senza perdere le impostazioni, **Reset** azzera la correzione della clip. Salva il progetto per conservarla; Esporta la applica al risultato finale.
+
+## I nuovi strumenti intelligenti
+
+- **AI Cut**: scegli la lingua e una pausa minima fra mezzo secondo e due secondi. Premi **Analizza video e audio**, ascolta i punti proposti e spunta quelli da eliminare. Puoi correggere gli orari. **Applica tagli selezionati** chiude gli spazi mantenendo video e audio insieme. **Indietro** annulla. Controlla sempre esitazioni e ciak proposti: possono essere interpretati male dal riconoscimento.
+- **Captions**: fai una nuova trascrizione e lascia spuntato **Parola evidenziata ottanio** prima di premere **GENERATE**. Appariranno frasi brevi con la parola pronunciata evidenziata.
+- **Pen Mask**: scegli il video o l’immagine, premi il pulsante, clicca per disegnare e trascina per creare le curve. Chiudi il tracciato sul primo punto o con **Chiudi tracciato**. Trascina nodi/maniglie per rifinirlo; **Inverti** e **Sfumatura** regolano il ritaglio. **Full** ingrandisce il video mantenendo lo strumento e i suoi comandi.

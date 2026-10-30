@@ -1,4 +1,5 @@
 import type { VisualEffect, Adjustments } from '../services/visualSettings';
+export interface TimedWord {text:string;startTime:number;endTime:number;probability?:number}
 export type TrackType = 'effect' | 'video' | 'audio' | 'image' | 'text';
 
 export interface TimelineMarker {
@@ -32,6 +33,9 @@ export interface TimelineClip {
   animationOffset?: number; // internal still-frame animation clock
   text?: string;
   captionId?: string;
+  captionWords?:TimedWord[]; // source-relative within the original text clip
+  captionStyle?:'classic'|'karaoke';
+  mask?:import('../services/penMask').PenMask;
   adjustments?: Adjustments;
   colorGrade?: import('../services/colorGrade').ColorGrade;
   mediaUrl?: string;
@@ -73,6 +77,8 @@ export interface MediaAsset {
 }
 
 export interface SubtitleItem {
+  words?:TimedWord[];
+  style?:'classic'|'karaoke';
   row?:number;
   transparency?:number;
   fadeIn?:number;

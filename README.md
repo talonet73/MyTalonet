@@ -162,3 +162,13 @@ Architettura, intervalli dei controlli e verifiche: [docs/audio-mixer-verificati
 La scheda **COLOR**, rossa dopo VIDEO e AUDIO, offre due monitor **Originale / Corretto**. Seleziona una clip video o immagine dalla timeline o dal menu in alto. In **Ruote** trovi Lift/Gamma/Gain/Offset con master e canali RGB; in **Primarie** esposizione, contrasto/pivot, temperatura/tinta, saturazione/vibrance, tonalità, ombre/alte luci, neri/bianchi e nitidezza. **Curve** permette di modificare Master RGB e i tre canali, trascinando sette nodi o scrivendo i valori. Bypass e Reset agiscono sul grade della clip, lasciando gli altri effetti del progetto.
 
 Waveform Y, parade RGB, istogramma e vectorscope misurano il fotogramma scelto fra Originale e Corretto. Le regolazioni COLOR vengono conservate nel progetto e applicate a video, immagini e Screenshot esportati. Il flusso è SDR Rec.709 a intervallo completo; dettagli e risultati in [docs/color-verification.md](docs/color-verification.md).
+
+## Montaggio intelligente, sottotitoli dinamici e maschere
+
+**AI Cut** analizza il mix reale con Whisper e FFmpeg. Scegli lingua e soglia delle pause **0,5–2 s**, controlla gli intervalli, modifica i tempi se necessario e applica i tagli selezionati. Esitazioni e possibili ciak/ripetizioni richiedono revisione: il riconoscimento vocale può ometterli o interpretarli male. I tagli agiscono su tutte le piste mantenendo sincronismo e collegamenti; **Indietro** ripristina l’operazione. I file originali restano invariati.
+
+In **Captions**, una nuova trascrizione include i tempi delle singole parole. **Parola evidenziata ottanio** genera frasi fino a cinque parole e sposta il fondo colorato sulla parola pronunciata, anche nell’esportazione. Una correzione che cambia il numero delle parole usa lo stile classico, evitando tempi inventati.
+
+**Pen Mask** permette di disegnare tracciati Bézier, spostare nodi e maniglie, invertire e sfumare la maschera. Premi **Full** nel player per lavorare a tutto schermo mantenendo la penna. Anche le finestre degli strumenti già aperti, come Adjustment, rimangono disponibili a tutto schermo. Le maschere vengono salvate nel progetto ed esportate con la trasparenza corretta.
+
+Ricerca GitHub, licenze, scelte, limiti e verifiche: [docs/github-ai-research.md](docs/github-ai-research.md). Non servono nuove dipendenze o ulteriori modelli rispetto all’installazione precedente.

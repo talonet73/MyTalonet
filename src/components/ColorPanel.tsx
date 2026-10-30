@@ -58,7 +58,7 @@ export function ColorPanel({clips,selectedId,currentTime,duration,playing,aspect
       const videos=clips.filter(c=>c.type==='video'),images=clips.filter(c=>c.type==='image'),effects=clips.filter(c=>c.type==='effect'),subtitles=timelineSubtitles(clips);
       try{
         await playbackEngine.prepareAndRenderFrame(a,currentTime,videos,effects,images,subtitles,()=>!cancelled);if(cancelled)return;
-        const clean=(c:TimelineClip)=>({...c,effects:[],adjustments:{},colorGrade:undefined});
+        const clean=(c:TimelineClip)=>({...c,effects:[],adjustments:{},colorGrade:undefined,mask:undefined});
         playbackEngine.renderFrame(b,currentTime,videos.map(clean),[],images.map(clean),subtitles);
         const sample=document.createElement('canvas');sample.width=320;sample.height=Math.max(1,Math.round(320/ratio));const ctx=sample.getContext('2d',{willReadFrequently:true})!;ctx.drawImage(scopeSource==='before'?b:a,0,0,sample.width,sample.height);
         const s=scopeData(ctx.getImageData(0,0,sample.width,sample.height).data,sample.width,sample.height);scopeRefs.current.forEach((c,i)=>{if(c)drawScope(c,(['wave','parade','hist','vector'] as const)[i],s);});setStats(s);setError('');
