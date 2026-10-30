@@ -37,6 +37,7 @@ class Recorder:
     def __init__(self, device=None):
         self.device = device
         self.done = threading.Event()
+        self.discard_requested = threading.Event()
         self.finished = threading.Event()
         self.error = None
         self.path = None
@@ -69,12 +70,15 @@ class Recorder:
         except Exception as exc:
             self.error = str(exc)
         finally:
+            if self.discard_requested.is_set() and self.path:
+                self.path.unlink(missing_ok=True)
             self.finished.set()
 
     def stop(self):
         self.done.set()
 
     def discard(self):
+        self.discard_requested.set()
         self.stop()
         if self.thread:
             self.thread.join(timeout=5)

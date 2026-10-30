@@ -6,6 +6,8 @@ import platform
 import sys
 import tempfile
 import traceback
+import time
+import ctypes
 from datetime import timedelta
 from pathlib import Path
 
@@ -49,6 +51,22 @@ def main():
                 assert app.capture_dialog.winfo_exists()
                 app.capture_dialog.destroy()
                 report["checks"]["clipboard_review"] = True
+                app.desktop.hotkey_ready.wait(timeout=5)
+                # Exercise actual Windows hotkey dispatch, then Tk queue handling.
+                user32 = ctypes.windll.user32
+                for key in (0x11, 0x12, ord("T")):
+                    user32.keybd_event(key, 0, 0, 0)
+                for key in (ord("T"), 0x12, 0x11):
+                    user32.keybd_event(key, 0, 2, 0)
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    app.root.update()
+                    if app.capture_dialog.winfo_exists():
+                        break
+                    time.sleep(0.02)
+                assert app.capture_dialog.winfo_exists(), "Ctrl+Alt+T non ha aperto la revisione"
+                app.capture_dialog.destroy()
+                report["checks"]["global_hotkey"] = True
                 ident = app.store.add("Prova Windows", now_local() + timedelta(minutes=2))
                 app.refresh()
                 assert app.events.size() == 1
