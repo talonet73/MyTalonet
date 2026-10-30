@@ -28,6 +28,8 @@ Name: "startup"; Description: "Avvia TALEVENT all'accesso a Windows per ricevere
 
 [Files]
 Source: "..\dist\TALEVENT\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "LICENSE-Whisper.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\TALEVENT"; Filename: "{app}\TALEVENT.exe"; AppUserModelID: "MyTalonet.TALEVENT"
