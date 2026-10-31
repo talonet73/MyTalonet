@@ -42,9 +42,11 @@ def main():
             with file.open('rb') as source:
                 assert hashlib.file_digest(source, 'sha256').hexdigest() == expected, name
         subprocess.run([str(install / 'runtime/node.exe'), '--version'], check=True)
-        env = {**os.environ, 'TALEDIT_NO_BROWSER': '1', 'WHISPER_MODEL_DIR': str(install / 'models/whisper-small'), 'BG_MODEL_DIR': str(install / 'models/bg'), 'PYTHONNOUSERSITE': '1', 'PYTHONPATH': '', 'OMP_NUM_THREADS': '2'}
+        env = {**os.environ, 'TALEDIT_NO_BROWSER': '1', 'WHISPER_MODEL_DIR': str(install / 'models/whisper-small'), 'BG_MODEL_DIR': str(install / 'models/bg'), 'PYTHONNOUSERSITE': '1', 'PYTHONHOME': str(install / 'runtime/python'), 'PYTHONUTF8': '1', 'PYTHONIOENCODING': 'utf-8', 'PYTHONPATH': '', 'OMP_NUM_THREADS': '2'}
         python = install / 'runtime/python/python.exe'
         subprocess.run([str(python), '-c', "import av,ctranslate2,onnxruntime,faster_whisper,rembg;print('Private Windows Python, PyAV, Whisper, rembg: PASS')"], env=env, check=True, timeout=120)
+        unicode_text = subprocess.check_output([str(python), '-c', "print('Caffè, più qualità: €')"], env=env).decode('utf-8').strip()
+        assert unicode_text == 'Caffè, più qualità: €', unicode_text
         speech = subprocess.run([str(python), str(install / 'app/scripts/transcribe.py')], input=json.dumps({'file':str(ROOT / 'tests/fixtures/jfk.wav'),'language':'en'}), text=True, capture_output=True, env=env, check=True, timeout=240)
         subtitles = json.loads(speech.stdout)['subtitles']
         assert 'ask not what your country can do for you' in ' '.join(s['text'].lower() for s in subtitles)

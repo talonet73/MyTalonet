@@ -17,6 +17,7 @@ test('packaged Windows runtime uses only private executables and separates user 
   assert.equal(config.env.HOST,'127.0.0.1');assert.equal(config.env.NODE_ENV,'production');
   assert.equal(config.env.YT_DLP_PATH,path.join(root,'tools/yt-dlp.exe'));
   assert.ok(config.env.PATH.startsWith(path.join(root,'tools')+path.delimiter));
+  assert.equal(config.env.PYTHONHOME,path.join(root,'runtime/python'));assert.equal(config.env.PYTHONUTF8,'1');assert.equal(config.env.PYTHONIOENCODING,'utf-8');
   assert.equal(config.env.PYTHONNOUSERSITE,'1');assert.equal(config.env.PYTHONPATH,'');
 });
 test('packaged launcher control waits for the reply, and treats a missing instance as stopped',async()=>{
