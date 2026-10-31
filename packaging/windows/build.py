@@ -40,6 +40,15 @@ def unpack(archive, destination, prefix=''):
                 raise RuntimeError('Unsafe archive path')
             write_member(zipped, name, destination / relative)
 
+def compile_installer(makensis, payload, out, version):
+    installer = out / 'TALEDIT-Setup.exe'
+    definitions = {'OUTPUT': installer, 'PAYLOAD': payload, 'VERSION': version}
+    run(makensis, *[(('/D' if os.name == 'nt' else '-D') + key + '=' + str(value)) for key, value in definitions.items()], HERE / 'installer.nsi')
+    checksum = hashlib.sha256(installer.read_bytes()).hexdigest()
+    (out / 'TALEDIT-Setup.exe.sha256').write_text(checksum + '  TALEDIT-Setup.exe\n')
+    print(f'Installer: {installer} ({installer.stat().st_size / 1024**2:.1f} MiB); SHA256 {checksum}', flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--cache', type=Path, default=ROOT / 'build' / 'cache')
@@ -47,9 +56,18 @@ def main():
     parser.add_argument('--whisper-model', type=Path)
     parser.add_argument('--bg-model', type=Path)
     parser.add_argument('--makensis', default='makensis')
+    mode=parser.add_mutually_exclusive_group()
+    mode.add_argument('--payload-only',action='store_true')
+    mode.add_argument('--installer-only',action='store_true')
     args = parser.parse_args()
     cache, out = args.cache.resolve(), args.out.resolve()
     payload = out / 'payload'
+    if args.installer_only:
+        version=(payload/'VERSION.txt').read_text().strip()
+        inventory=json.loads((out/'payload.sha256.json').read_text())
+        for name, checksum in inventory.items():verify(payload/name,checksum)
+        compile_installer(args.makensis,payload,out,version)
+        return
     cache.mkdir(parents=True, exist_ok=True)
     out.mkdir(parents=True, exist_ok=True)
     # Restrict cleanup to our generated payload, never to a caller-selected model/cache.
@@ -135,12 +153,8 @@ def main():
     # Inventory includes every runtime dependency, AI model and application resource.
     inventory = {p.relative_to(payload).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(payload.rglob('*')) if p.is_file()}
     (out / 'payload.sha256.json').write_text(json.dumps(inventory, indent=2) + '\n')
-    installer = out / 'TALEDIT-Setup.exe'
-    definitions = {'OUTPUT': installer, 'PAYLOAD': payload, 'VERSION': version}
-    run(args.makensis, *[(('/D' if os.name == 'nt' else '-D') + key + '=' + str(value)) for key, value in definitions.items()], HERE / 'installer.nsi')
-    checksum = hashlib.sha256(installer.read_bytes()).hexdigest()
-    (out / 'TALEDIT-Setup.exe.sha256').write_text(checksum + '  TALEDIT-Setup.exe\n')
-    print(f'Installer: {installer} ({installer.stat().st_size / 1024**2:.1f} MiB); SHA256 {checksum}', flush=True)
+    if not args.payload_only:
+        compile_installer(args.makensis, payload, out, version)
 
 if __name__ == '__main__':
     try:

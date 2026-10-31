@@ -12,11 +12,14 @@ function runtime(root = __dirname, cache = path.join(process.env.LOCALAPPDATA ||
 }
 function control(pipe, command) {
   return new Promise(resolve => {
-    const socket=net.createConnection(pipe);let reply='';
-    socket.setTimeout(5000,()=>socket.destroy());
-    socket.on('connect',()=>socket.end(command+'\n'));
-    socket.on('data',chunk=>reply+=chunk);
-    socket.on('error',()=>resolve(false));socket.on('close',()=>resolve(reply.trim()==='ok'));
+    const socket=net.createConnection(pipe);let reply='',settled=false;
+    const finish=value=>{if(settled)return;settled=true;socket.destroy();resolve(value);};
+    socket.setTimeout(5000,()=>finish(false));
+    // Windows named pipes do not offer TCP-style half-close semantics. Frame both
+    // directions explicitly and finish on the reply, rather than waiting for EOF.
+    socket.on('connect',()=>socket.write(command+'\n'));
+    socket.on('data',chunk=>{reply+=chunk;if(reply.includes('\n'))finish(reply.trim()==='ok');else if(reply.length>64)finish(false);});
+    socket.on('error',()=>finish(false));socket.on('close',()=>finish(false));
   });
 }
 function openBrowser(origin) {
@@ -37,10 +40,26 @@ async function main() {
   fs.closeSync(log);
   const exited=new Promise(resolve=>child.once('close',resolve));
   let failure;child.once('error',error=>failure=error);
-  const stop=()=>{if(child.exitCode===null)child.kill();};
+  let stopping=false;
+  const stop=()=>{stopping=true;if(child.exitCode===null)child.kill();};
   process.once('SIGINT',stop);process.once('SIGTERM',stop);
+  let ready=false;
+  const controller=net.createServer(socket=>{
+    let command='',handled=false;socket.setEncoding('utf8');socket.setTimeout(5000,()=>socket.destroy());
+    socket.on('error',()=>socket.destroy());
+    socket.on('data',chunk=>{
+      if(handled)return;command+=chunk;
+      if(command.length>64){socket.destroy();return;}
+      if(!command.includes('\n'))return;handled=true;
+      if(command.trim()==='stop'){stop();exited.then(()=>socket.end('ok\n'));}
+      else if(command.trim()==='open'){if(ready)openBrowser(config.origin);socket.end('ok\n');}
+      else socket.end('error\n');
+    });
+  });
   try {
-    const deadline=Date.now()+60000;let ready=false;
+    // Own the control pipe before the HTTP health endpoint becomes visible.
+    await new Promise((resolve,reject)=>{controller.once('error',reject);controller.listen(config.pipe,resolve);});
+    const deadline=Date.now()+60000;
     while(Date.now()<deadline){
       if(failure)throw failure;
       if(child.exitCode!==null)throw new Error('TALEDIT si è fermato durante l’avvio.');
@@ -48,17 +67,14 @@ async function main() {
       await new Promise(resolve=>setTimeout(resolve,250));
     }
     if(!ready)throw new Error('TALEDIT non ha risposto entro un minuto.');
-    const controller=net.createServer({allowHalfOpen:true},socket=>{
-      let command='';socket.setEncoding('utf8');socket.setTimeout(3000,()=>socket.destroy());
-      socket.on('data',chunk=>{command+=chunk;if(command.length>64)socket.destroy();});
-      socket.on('end',()=>{if(command.trim()==='stop'){stop();exited.then(()=>socket.end('ok'));}else if(command.trim()==='open'){openBrowser(config.origin);socket.end('ok');}else socket.end('error');});
-    });
-    await new Promise((resolve,reject)=>{controller.once('error',reject);controller.listen(config.pipe,resolve);});
     openBrowser(config.origin);
     await exited;
-    await new Promise(resolve=>controller.close(resolve));
-    if(child.exitCode && child.exitCode!==0)throw new Error('TALEDIT si è chiuso con un errore.');
-  } finally {stop();process.removeListener('SIGINT',stop);process.removeListener('SIGTERM',stop);}
+    if(!stopping && child.exitCode && child.exitCode!==0)throw new Error('TALEDIT si è chiuso con un errore.');
+  } finally {
+    stop();
+    await new Promise(resolve=>controller.close(()=>resolve()));
+    process.removeListener('SIGINT',stop);process.removeListener('SIGTERM',stop);
+  }
 }
 if(require.main===module)main().catch(error=>{
   const config=runtime();fs.mkdirSync(config.cache,{recursive:true});fs.appendFileSync(path.join(config.cache,'avvio.log'),'\n'+error.stack+'\n');

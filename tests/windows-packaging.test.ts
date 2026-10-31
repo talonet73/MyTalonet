@@ -28,7 +28,8 @@ test('packaged launcher control waits for the reply, and treats a missing instan
   const received:string[]=[];
   const server=net.createServer({allowHalfOpen:true},socket=>{
     let command='';socket.setEncoding('utf8');socket.on('data',chunk=>command+=chunk);
-    socket.on('end',()=>{received.push(command.trim());setTimeout(()=>socket.end('ok'),50);});
+    socket.on('end',()=>socket.destroy());
+    socket.on('data',()=>{if(command.includes('\n')){received.push(command.trim());setTimeout(()=>socket.write('ok\n'),50);}});
   });
   await new Promise<void>(resolve=>server.listen(pipe,resolve));
   try{assert.equal(await control(pipe,'open'),true);assert.equal(await control(pipe,'stop'),true);assert.deepEqual(received,['open','stop']);}

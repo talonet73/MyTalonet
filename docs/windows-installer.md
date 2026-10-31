@@ -45,7 +45,11 @@ Su Linux è possibile la compilazione incrociata usando NSIS e
 `--whisper-model /percorso/modello --bg-model /percorso/modello`.
 Il bundle server non include il server di sviluppo Vite; l'importazione è differita.
 
-Il workflow `.github/workflows/taledit-windows.yml` esegue il compilatore su Windows,
+Il workflow `.github/workflows/taledit-windows.yml` prepara prima il payload con
+`--payload-only`, prova avvio, tre riaperture e chiusura su Windows, poi esegue
+`--installer-only` per comprimere il pacchetto. I comandi tra le istanze usano
+messaggi terminati da newline; non dipendono dalla chiusura parziale della pipe.
+Dopo la compressione il workflow
 installa davvero l'EXE in un percorso con spazi, controlla l'inventario di tutti i file,
 importa i moduli nativi Windows, trascrive JFK con timestamp parola per parola,
 esegue U2NetP, avvia l'EXE, prova doppio avvio, importazione ed esportazione MP4 con
