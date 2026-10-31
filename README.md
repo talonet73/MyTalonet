@@ -2,9 +2,26 @@
 
 Editor video locale con React, Express, FFmpeg e strumenti MCP per Claude e ChatGPT.
 
-## Avvio
+## Installer unico per Windows
 
-Su Windows: [istruzioni con doppio clic](APRI-SU-WINDOWS.md), con i file `1-PREPARA-TALEDIT.cmd` e `2-AVVIA-TALEDIT.cmd`. La procedura Windows e predisposta ma non e stata eseguita su una macchina Windows; le prove browser descritte sotto sono state eseguite nell’ambiente Linux.
+[Scarica **TALEDIT-Setup.exe**](https://github.com/talonet73/MyTalonet/releases/download/taledit-windows-336592184fc9/TALEDIT-Setup.exe) per Windows 10/11 a 64 bit.
+Include Python, Node.js, strumenti video e modelli gratuiti per sottotitoli e rimozione
+sfondo: il primo avvio usa i componenti già inclusi nel pacchetto.
+
+Salva il progetto e chiudi TALEDIT e la vecchia finestra nera. Apri il file scaricato,
+poi premi **Avanti → Installa → Fine**. Le volte successive apri **TALEDIT** dal desktop.
+Per fermare anche il programma in background: **Start → TALEDIT → Chiudi TALEDIT**.
+
+Installer costruito e provato su Windows: installazione, runtime privati, trascrizione
+reale, rimozione sfondo, avvii ripetuti, importazione, esportazione, screenshot,
+interfaccia browser e disinstallazione con conservazione dei dati. Superati anche
+111 test dell'app e 34 prove browser in produzione su Linux.
+[Istruzioni e recupero dei progetti precedenti](docs/windows-installer.md) ·
+[Report delle verifiche e limiti](docs/windows-installer-verification.md).
+
+## Avvio dai sorgenti
+
+In alternativa all’installer, su Windows puoi usare la cartella dei sorgenti con i file `1-PREPARA-TALEDIT.cmd` e `2-AVVIA-TALEDIT.cmd`: [istruzioni](APRI-SU-WINDOWS.md). Il test Windows dell’installer usa componenti privati già inclusi; non esegue la preparazione globale tramite questi due script.
 
 Requisiti: Node.js >=22.12, Python 3.12, FFmpeg e ffprobe nel PATH.
 

@@ -78,3 +78,13 @@ Aggiornamento strumenti intelligenti del 30 ottobre 2026: [ricerca GitHub, tagli
 Correzione del flusso AI Cut e icone: [scansione automatica completa e verifiche](automatic-cut-verification.md).
 
 Continuità dei tagli e video ricevuti da MCP: [correzioni e verifiche](cut-continuity-mcp-verification.md).
+
+
+## Aggiornamento 31 ottobre 2026 — installer unico Windows
+
+L’installer completo è stato costruito, installato e provato realmente su Windows
+con esito positivo, compresi avvii ripetuti, modelli AI, esportazione, screenshot,
+interfaccia e conservazione dei dati durante la disinstallazione. La versione
+rilasciata ha superato anche 111 test dell’app e 34 prove browser su Linux.
+Il [report dedicato](windows-installer-verification.md) contiene versione, esecuzione
+Windows, hash del download, problemi emersi e correzioni, copertura e limiti.

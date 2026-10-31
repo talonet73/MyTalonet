@@ -1,5 +1,25 @@
 # Aprire TALEDIT su Windows
 
+## Metodo consigliato: un solo file da installare
+
+1. Salva il progetto e chiudi TALEDIT e la vecchia finestra nera di avvio.
+2. [Scarica **TALEDIT-Setup.exe**](https://github.com/talonet73/MyTalonet/releases/download/taledit-windows-336592184fc9/TALEDIT-Setup.exe).
+3. Apri il file e premi **Avanti**, poi **Installa**, quindi **Fine**.
+4. Le volte successive apri **TALEDIT** dall’icona sul desktop.
+
+Python, strumenti video e modelli gratuiti sono inclusi. L’installer è per Windows
+10/11 a 64 bit. L’app si apre nel browser del computer.
+Per fermarla del tutto usa **Start → TALEDIT → Chiudi TALEDIT**.
+
+Conserva la vecchia cartella: se hai progetti già salvati, segui le
+[istruzioni per recuperare i loro file](docs/windows-installer.md#progetti-e-aggiornamenti).
+La nuova installazione e la disinstallazione mantengono separati i dati personali.
+
+La prova completa dell’installer su Windows è riuscita. Sono passati anche 111 test
+dell’app e 34 prove browser su Linux: [risultati e limiti](docs/windows-installer-verification.md).
+
+## Metodo alternativo: cartella dei sorgenti
+
 Questa procedura e per Windows 10/11 a 64 bit. Serve Internet per la prima preparazione e per il primo avvio. I programmi necessari e il riconoscimento vocale sono gratuiti; vengono usati spazio e risorse del tuo computer.
 
 1. Su GitHub apri il ramo con le correzioni. Premi il pulsante verde **Code**, poi **Download ZIP**.
@@ -17,7 +37,7 @@ Se compare un blocco di sicurezza di Windows, controlla provenienza e messaggio 
 
 Il primo file usa il programma di installazione di Windows per Node.js LTS, Python 3.12, FFmpeg e i componenti Microsoft necessari. Rimangono attive le verifiche normali delle fonti e dei pacchetti. Il secondo installa le versioni dell’app conservate nel progetto, usa PyAV 16.1.0 e salva il modello vocale nella cartella personale di Windows. Prepara anche BG Remover con un ambiente separato e un modello gratuito da circa 4,6 MB. Non serve un abbonamento a servizi di riconoscimento vocale.
 
-L’app e stata avviata e verificata realmente nel browser dell’ambiente Linux di sviluppo, con 108 test principali e 34 prove browser superate. Non e disponibile una macchina Windows in questo ambiente: la procedura di installazione Windows e predisposta, ma non e stata eseguita su Windows. Un eventuale errore specifico di quel sistema va verificato sulla macchina interessata.
+L’installer unico è stato costruito e provato realmente su Windows tramite GitHub Actions. La verifica aggiornata comprende anche 111 test principali e 34 prove browser su Linux. Il metodo alternativo descritto qui installa componenti globali con gli script: questa preparazione è distinta dal percorso dell’installer, che contiene già i propri componenti privati.
 
 YouTube diretto rimane soggetto alle restrizioni di rete. Il pulsante **Carica video locale**, presente nella finestra YouTube, consente di importare un file gia sul tuo computer. Nessun blocco viene aggirato.
 

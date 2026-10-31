@@ -1,5 +1,7 @@
 # Installer unico TALEDIT per Windows
 
+[Scarica TALEDIT-Setup.exe](https://github.com/talonet73/MyTalonet/releases/download/taledit-windows-336592184fc9/TALEDIT-Setup.exe) · [Verifiche eseguite](windows-installer-verification.md).
+
 La distribuzione `TALEDIT-Setup.exe` installa per il solo utente Windows 10/11 x64,
 crea il collegamento sul desktop e apre l'interfaccia nel browser installato.
 Non richiede installazioni separate di Node.js, Python, FFmpeg o librerie/modelli AI.
