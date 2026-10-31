@@ -15,9 +15,9 @@ Exact binary versions, URLs and hashes are recorded in assets.lock.json.
   Upstream binaries: https://github.com/GyanD/codexffmpeg/releases/tag/7.1.1
   FFmpeg source revision: https://github.com/FFmpeg/FFmpeg/tree/db69d06eee
   Builder source and dependency recipes: https://github.com/m-ab-s/media-autobuild_suite
-- yt-dlp 2025.03.31 Windows standalone distribution, upstream licenses and notices:
-  https://github.com/yt-dlp/yt-dlp/tree/2025.03.31#license
-  Source: https://github.com/yt-dlp/yt-dlp/tree/2025.03.31
+- yt-dlp 2026.08.19 Windows standalone distribution, upstream licenses and notices:
+  https://github.com/yt-dlp/yt-dlp/tree/2026.08.19#license
+  Source: https://github.com/yt-dlp/yt-dlp/tree/2026.08.19
 - faster-whisper (MIT), CTranslate2 (MIT), PyAV (BSD), ONNX Runtime (MIT),
   rembg (MIT), NumPy (BSD), SciPy (BSD), and other Python package notices are
   included with each installed .dist-info directory.

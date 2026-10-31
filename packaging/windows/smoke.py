@@ -42,6 +42,8 @@ def main():
             with file.open('rb') as source:
                 assert hashlib.file_digest(source, 'sha256').hexdigest() == expected, name
         subprocess.run([str(install / 'runtime/node.exe'), '--version'], check=True)
+        downloader_version=subprocess.check_output([str(install/'tools/yt-dlp.exe'),'--version'],text=True).strip()
+        assert downloader_version=='2026.08.19', downloader_version
         env = {**os.environ, 'TALEDIT_NO_BROWSER': '1', 'WHISPER_MODEL_DIR': str(install / 'models/whisper-small'), 'BG_MODEL_DIR': str(install / 'models/bg'), 'PYTHONNOUSERSITE': '1', 'PYTHONHOME': str(install / 'runtime/python'), 'PYTHONUTF8': '1', 'PYTHONIOENCODING': 'utf-8', 'PYTHONPATH': '', 'OMP_NUM_THREADS': '2'}
         python = install / 'runtime/python/python.exe'
         subprocess.run([str(python), '-c', "import av,ctranslate2,onnxruntime,faster_whisper,rembg;print('Private Windows Python, PyAV, Whisper, rembg: PASS')"], env=env, check=True, timeout=120)
