@@ -1,0 +1,2 @@
+# Microsoft C/C++ runtime DLLs bundled privately alongside Python; no system install.
+msvc-runtime==14.51.36231

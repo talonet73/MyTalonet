@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import {saveScreenshotToDownloads} from './server/screenshot';
 import express from 'express';
-import { createServer as createViteServer } from 'vite';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
@@ -68,6 +67,7 @@ export async function createApp(production = process.env.NODE_ENV === 'productio
     app.use(express.static(path.resolve('dist')));
     app.get('*', (_req, res) => res.sendFile(path.resolve('dist/index.html')));
   } else {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
     app.use(vite.middlewares);
   }

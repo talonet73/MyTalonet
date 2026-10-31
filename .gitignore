@@ -7,3 +7,5 @@ media_downloads/*
 !media_downloads/.gitkeep
 test-results/
 playwright-report/
+build/
+__pycache__/

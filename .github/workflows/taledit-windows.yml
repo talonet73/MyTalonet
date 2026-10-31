@@ -1,0 +1,62 @@
+name: TALEDIT Installer Windows
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/taledit-export-mcp-whisper]
+    paths: ['packaging/windows/**', '.github/workflows/taledit-windows.yml']
+permissions:
+  contents: read
+concurrency:
+  group: taledit-windows-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  installer:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - name: Install compiler
+        shell: pwsh
+        run: |
+          if (!(Test-Path "${env:ProgramFiles(x86)}\NSIS\makensis.exe")) { choco install nsis --yes --no-progress }
+      - name: Build complete offline installer
+        shell: pwsh
+        run: python packaging/windows/build.py --makensis "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+      - run: npx playwright install chromium
+      - name: Test actual installer and installed application on Windows
+        run: python packaging/windows/smoke.py build/windows/TALEDIT-Setup.exe build/windows/payload.sha256.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TALEDIT-Windows-verified
+          path: |
+            build/windows/TALEDIT-Setup.exe
+            build/windows/TALEDIT-Setup.exe.sha256
+            build/windows/payload.sha256.json
+      - name: Publish only after Windows checks pass
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "taledit-windows-$('${{ github.sha }}'.Substring(0,12))"
+          @"
+          Installer unico e completo per Windows 10/11 a 64 bit. Include Python, Node.js, FFmpeg, Whisper small e U2NetP; nessuna preparazione manuale.
+
+          Scarica TALEDIT-Setup.exe, aprilo e segui Installa. L'app si apre nel browser. I file personali restano separati dagli aggiornamenti.
+
+          Build verificata su Windows: installazione, runtime inclusi, trascrizione reale e timestamp, rimozione sfondo, avvio, importazione, esportazione video/audio, screenshot PNG, interfaccia, chiusura e disinstallazione con conservazione dei dati.
+
+          Sorgente app: https://github.com/${{ github.repository }}/tree/${{ github.sha }}
+          Componenti, licenze e riferimenti ai sorgenti: packaging/windows/THIRD-PARTY.md nello stesso commit. Installer privo di firma digitale.
+          "@ | Set-Content -Encoding utf8 build/windows/release-notes.md
+          gh release create $tag build/windows/TALEDIT-Setup.exe build/windows/TALEDIT-Setup.exe.sha256 --title "TALEDIT Windows $tag" --notes-file build/windows/release-notes.md --target '${{ github.sha }}' --prerelease
