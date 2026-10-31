@@ -95,4 +95,9 @@ def main():
         print('PASS: actual NSIS install, SHA256 inventory, bundled native runtimes, speech timestamps, segmentation, launch, duplicate launch, import, visible MP4 export with audio, PNG Downloads, browser UI, shutdown, uninstall preserving data.')
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except Exception as error:
+        detail = (getattr(error, 'stderr', '') or '') + '\n' + str(error)
+        print('::error::' + detail.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'), flush=True)
+        raise

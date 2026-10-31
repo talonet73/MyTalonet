@@ -94,6 +94,9 @@ def main():
                         raise RuntimeError(f'Unknown wheel data scheme: {kind}')
                     destination = target.joinpath(*parts[2:])
                 write_member(zipped, member, destination)
+    # Use one consistent C++ runtime version, including Python's startup DLLs.
+    for name in ['vcruntime140.dll', 'vcruntime140_1.dll']:
+        shutil.copy2(python_root / 'Scripts' / name, python_root / name)
     with zipfile.ZipFile(cache / 'ffmpeg.zip') as zipped:
         for executable in ['ffmpeg.exe', 'ffprobe.exe']:
             member = next(name for name in zipped.namelist() if name.endswith('/bin/' + executable))
@@ -140,4 +143,8 @@ def main():
     print(f'Installer: {installer} ({installer.stat().st_size / 1024**2:.1f} MiB); SHA256 {checksum}', flush=True)
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except Exception as error:
+        print('::error::' + str(error).replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'), flush=True)
+        raise
