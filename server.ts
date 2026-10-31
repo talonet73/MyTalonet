@@ -4,7 +4,7 @@ import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
+import { isServerEntry } from './server/entrypoint';
 import { downloadsDir, describeMedia, exportMedia, InputError, run } from './server/media';
 import { installMcp } from './server/mcp';
 import { installCaptions } from './server/captions';
@@ -79,6 +79,6 @@ export async function createApp(production = process.env.NODE_ENV === 'productio
   });
   return app;
 }
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isServerEntry(import.meta.url)) {
   createApp().then(app => app.listen(Number(process.env.PORT || 3000), process.env.HOST || '0.0.0.0', () => console.log('[TALEDIT] Server avviato sulla porta', process.env.PORT || 3000))).catch(error => { console.error(error); process.exitCode = 1; });
 }

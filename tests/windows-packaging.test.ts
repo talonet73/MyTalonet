@@ -5,6 +5,8 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import {pathToFileURL} from 'node:url';
+import {isServerEntry} from '../server/entrypoint';
 const {runtime,control}=createRequire(import.meta.url)('../packaging/windows/launcher.cjs');
 test('packaged Windows runtime uses only private executables and separates user media from program updates',()=>{
   const root=path.resolve('App con spazi'),cache=path.resolve('Dati personali');
@@ -33,4 +35,16 @@ test('packaged launcher control waits for the reply, and treats a missing instan
   finally{await new Promise<void>(resolve=>server.close(()=>resolve()));}
   assert.equal(await control(pipe,'stop'),false);
   await fs.rm(temp,{recursive:true,force:true});
+});
+
+test('server entrypoint recognizes filesystem aliases and rejects unrelated imports',async()=>{
+  const folder=await fs.mkdtemp(path.join(os.tmpdir(),'taledit-entry-'));
+  try {
+    const main=path.join(folder,'server.mjs'),alias=path.join(folder,'alias.mjs'),other=path.join(folder,'test.mjs');
+    await fs.writeFile(main,'');await fs.writeFile(other,'');await fs.symlink(main,alias);
+    assert.equal(isServerEntry(pathToFileURL(main).href,alias),true);
+    assert.equal(isServerEntry(pathToFileURL(alias).href,main),true);
+    assert.equal(isServerEntry(pathToFileURL(main).href,other),false);
+    assert.equal(isServerEntry(pathToFileURL(main).href,path.join(folder,'missing.mjs')),false);
+  }finally{await fs.rm(folder,{recursive:true,force:true});}
 });

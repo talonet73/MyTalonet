@@ -9,6 +9,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import time
+import traceback
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -31,7 +32,7 @@ def main():
     parser.add_argument('inventory', type=Path)
     args = parser.parse_args()
     assert os.name == 'nt', 'This verification must run on Windows'
-    with tempfile.TemporaryDirectory(prefix='taledit installer ') as folder:
+    with tempfile.TemporaryDirectory(prefix='taledit installer ',ignore_cleanup_errors=True) as folder:
         install = Path(folder) / 'App con spazi'
         # NSIS requires /D last and unquoted, including directory names with spaces.
         subprocess.run(f'"{args.installer.resolve()}" /S /D={install}', check=True, timeout=600)
@@ -41,6 +42,7 @@ def main():
             assert file.is_file(), f'Missing installed file: {name}'
             with file.open('rb') as source:
                 assert hashlib.file_digest(source, 'sha256').hexdigest() == expected, name
+        print('::notice::Actual installer and complete payload inventory: PASS',flush=True)
         subprocess.run([str(install / 'runtime/node.exe'), '--version'], check=True)
         downloader_version=subprocess.check_output([str(install/'tools/yt-dlp.exe'),'--version'],text=True).strip()
         assert downloader_version=='2026.08.19', downloader_version
@@ -59,6 +61,7 @@ def main():
         removed = subprocess.run([str(python), str(install / 'app/scripts/remove-bg.py')], input=json.dumps({'type':'image','input':str(ROOT / 'tests/fixtures/bg-animal.jpg'),'output':str(output)}), text=True, capture_output=True, env=env, check=True, timeout=240)
         assert output.stat().st_size > 1000, removed.stdout
         subprocess.run([str(python), '-c', "from PIL import Image;import sys;im=Image.open(sys.argv[1]);lo,hi=im.getchannel('A').getextrema();assert lo<20 and hi>200;print('Real segmentation alpha: PASS')",str(output)],env=env,check=True)
+        print('::notice::Private Windows runtimes, UTF-8, real Whisper words/timestamps and real U2NetP: PASS',flush=True)
         launcher = subprocess.Popen([str(install / 'TALEDIT.exe')], env=env)
         try:
             deadline = time.time() + 90
@@ -68,10 +71,11 @@ def main():
                     assert health['ffmpeg'] and health['ffprobe']
                     break
                 except Exception:
-                    if time.time() > deadline:
+                    if time.time() > deadline or launcher.poll() is not None:
                         log = Path(os.environ['LOCALAPPDATA']) / 'TALEDIT/data/avvio.log'
                         raise RuntimeError(log.read_text() if log.exists() else 'Startup failed without log')
                     time.sleep(.5)
+            print('::notice::Installed EXE launch and private FFmpeg health: PASS',flush=True)
             subprocess.run([str(install / 'TALEDIT.exe')],env=env,check=True,timeout=15)
             fixture = Path(folder) / 'source.mp4'
             subprocess.run([str(install/'tools/ffmpeg.exe'),'-v','error','-y','-f','lavfi','-i','color=c=red:s=160x90:r=25:d=1','-f','lavfi','-i','sine=frequency=440:duration=1','-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac','-shortest',str(fixture)],check=True)
@@ -88,11 +92,13 @@ def main():
             assert snapshot['savedToDownloads'], snapshot
             # Exercise the installed production UI, not a development web server.
             subprocess.run(['node', str(ROOT/'packaging/windows/browser-smoke.mjs')],cwd=ROOT,check=True,timeout=90)
+            print('::notice::Duplicate launch, import, real MP4 export, PNG Downloads and browser UI: PASS',flush=True)
             marker=media/'installer-preserve-test.txt'
             marker.write_text('preserve user data')
         finally:
             subprocess.run([str(install/'CHIUDI-TALEDIT.exe')],env=env,check=True,timeout=20)
             launcher.wait(timeout=20)
+            print('::notice::Installed application shutdown: PASS',flush=True)
         subprocess.run(f'"{install / "Disinstalla.exe"}" /S _?={install}',check=True,timeout=120)
         assert not (install/'app/server.mjs').exists(), 'Uninstaller left app files'
         assert marker.read_text() == 'preserve user data', 'Uninstall removed user data'
@@ -102,6 +108,8 @@ if __name__ == '__main__':
     try:
         main()
     except Exception as error:
-        detail = (getattr(error, 'stderr', '') or '') + '\n' + str(error)
+        detail = (getattr(error, 'stderr', '') or '') + '\n' + ''.join(traceback.format_exception(error))
+        log=Path(os.environ.get('LOCALAPPDATA',''))/'TALEDIT/data/avvio.log'
+        if log.is_file():detail+='\nSERVER LOG:\n'+log.read_text(encoding='utf-8',errors='replace')[-12000:]
         print('::error::' + detail.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'), flush=True)
         raise
